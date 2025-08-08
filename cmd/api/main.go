@@ -99,6 +99,8 @@ func main() {
 	{
 		apiRoutes.GET("/products/search", h.HandleSearchProductsForSale)
 		apiRoutes.POST("/sales", h.HandleRegisterSale)
+		apiRoutes.GET("/sales/summary", h.HandleGetSalesSummary) // NOVA ROTA
+
 	}
 
 	// Redirecionamento principal

@@ -241,7 +241,11 @@
             </div>
         </div>
     </div>
+    {{ template "_chat_widget.html" . }}
+
     <script src="/static/js/admin.js"></script>
+    <script src="/static/js/chat.js"></script> <!-- NOVO -->
+
 </body>
 {{ define "pagination" }}
 <div class="flex justify-center items-center mt-6 space-x-2">

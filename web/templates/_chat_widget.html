@@ -1,0 +1,25 @@
+{{ define "_chat_widget.html" }}
+<!-- Ícone Flutuante -->
+<div id="chat-icon" class="fixed bottom-6 right-6 bg-blue-600 text-white p-4 rounded-full shadow-lg cursor-pointer hover:bg-blue-700 transition-transform transform hover:scale-110 z-50">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" viewBox="0 0 20 20" fill="currentColor">
+        <path fill-rule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.837 8.837 0 01-4.432-1.252l-2.434.812a1 1 0 01-1.25-1.25l.812-2.434A8.837 8.837 0 012 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9a1 1 0 11-2 0 1 1 0 012 0zm5 0a1 1 0 11-2 0 1 1 0 012 0zm-2 4a1 1 0 100 2 1 1 0 000-2z" clip-rule="evenodd" />
+    </svg>
+</div>
+
+<!-- Janela de Chat -->
+<div id="chat-window" class="fixed bottom-24 right-6 w-full max-w-md h-[32rem] bg-white rounded-lg shadow-2xl flex-col hidden z-50">
+    <div class="bg-gray-800 text-white p-4 rounded-t-lg flex justify-between items-center">
+        <h3 class="font-bold">Assistente de IA</h3>
+        <button id="close-chat" class="text-gray-300 hover:text-white text-2xl leading-none">&times;</button>
+    </div>
+    <div id="chat-messages" class="flex-1 p-4 overflow-y-auto bg-gray-50">
+        <!-- Mensagens do chat aparecerão aqui -->
+    </div>
+    <div class="p-4 border-t bg-white rounded-b-lg">
+        <form id="chat-form" class="flex space-x-2">
+            <input type="text" id="chat-input" placeholder="Pergunte algo..." class="flex-1 border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" autocomplete="off">
+            <button type="submit" class="bg-blue-600 text-white font-bold px-4 py-2 rounded-md hover:bg-blue-700">Enviar</button>
+        </form>
+    </div>
+</div>
+{{ end }}

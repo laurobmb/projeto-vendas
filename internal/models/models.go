@@ -50,12 +50,12 @@ type PaginationData struct {
 
 // StockViewItem representa uma linha na nova tabela de gestão de stock.
 type StockViewItem struct {
-	ProdutoID   uuid.UUID
-	ProdutoNome string
-	CodigoBarras string // CORREÇÃO: Adicionado o campo que estava em falta.
-	FilialID    uuid.UUID
-	FilialNome  string
-	Quantidade  int
+	ProdutoID    uuid.UUID
+	ProdutoNome  string
+	CodigoBarras string
+	FilialID     uuid.UUID
+	FilialNome   string
+	Quantidade   int
 }
 
 // Venda representa o registo de uma transação.
@@ -75,7 +75,7 @@ type ItemVenda struct {
 	PrecoUnitario float64   `json:"unit_price"`
 }
 
-// NOVO: SaleReportItem representa uma linha no novo relatório de vendas.
+// SaleReportItem representa uma linha no novo relatório de vendas.
 type SaleReportItem struct {
 	VendaID      uuid.UUID
 	DataVenda    time.Time
@@ -84,7 +84,7 @@ type SaleReportItem struct {
 	TotalVenda   float64
 }
 
-// NOVO: Struct para os dados da empresa.
+// Empresa representa os dados da empresa.
 type Empresa struct {
 	ID           uuid.UUID
 	RazaoSocial  string
@@ -93,7 +93,7 @@ type Empresa struct {
 	Endereco     string
 }
 
-// NOVO: Struct para os dados de um sócio.
+// Socio representa os dados de um sócio.
 type Socio struct {
 	ID        uuid.UUID
 	EmpresaID uuid.UUID
@@ -102,4 +102,11 @@ type Socio struct {
 	Idade     int
 	Email     string
 	CPF       string
+}
+
+// CORREÇÃO: Adicionada a struct que estava em falta.
+// SalesSummary representa um item no resumo de vendas para a IA.
+type SalesSummary struct {
+	FilialNome  string  `json:"filial_nome"`
+	TotalVendas float64 `json:"total_vendas"`
 }

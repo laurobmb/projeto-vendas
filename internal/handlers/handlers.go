@@ -27,6 +27,16 @@ func NewHandler(s storage.Store) *Handler {
 	return &Handler{Storage: s}
 }
 
+// NOVO: Handler da API para o resumo de vendas.
+func (h *Handler) HandleGetSalesSummary(c *gin.Context) {
+	summary, err := h.Storage.GetSalesSummary()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Falha ao obter o resumo de vendas."})
+		return
+	}
+	c.JSON(http.StatusOK, summary)
+}
+
 // CORREÇÃO: O middleware foi movido para aqui e tornado mais inteligente.
 func (h *Handler) AuthRequired(requiredRoles ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {

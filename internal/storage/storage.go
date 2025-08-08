@@ -48,10 +48,43 @@ type Store interface {
 	DeleteProductByID(id string) error
 	GetProductStockByFilial(productID string) ([]models.StockDetail, error)
 	AdjustStockQuantity(productID, filialID string, quantityToRemove int) error
+	GetSalesSummary() ([]models.SalesSummary, error) // Função adicionada
 }
 
 type Storage struct {
 	Dbpool *pgxpool.Pool
+}
+
+// NOVO: Struct para o resumo de vendas.
+type SalesSummary struct {
+	FilialNome  string  `json:"filial_nome"`
+	TotalVendas float64 `json:"total_vendas"`
+}
+
+// CORREÇÃO: A função agora usa 'models.SalesSummary' para corresponder à interface.
+func (s *Storage) GetSalesSummary() ([]models.SalesSummary, error) {
+	var summary []models.SalesSummary
+	sql := `
+		SELECT f.nome, COALESCE(SUM(v.total_venda), 0) as total
+		FROM filiais f
+		LEFT JOIN vendas v ON f.id = v.filial_id
+		GROUP BY f.nome
+		ORDER BY total DESC
+	`
+	rows, err := s.Dbpool.Query(context.Background(), sql)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var item models.SalesSummary
+		if err := rows.Scan(&item.FilialNome, &item.TotalVendas); err != nil {
+			return nil, err
+		}
+		summary = append(summary, item)
+	}
+	return summary, nil
 }
 
 func NewStorage() (*Storage, error) {
