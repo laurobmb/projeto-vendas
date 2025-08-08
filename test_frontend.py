@@ -1,0 +1,332 @@
+#!/usr/bin/env python3
+
+import os
+import unittest
+import sys
+import logging
+import time
+import shutil
+import psycopg2
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait, Select
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
+
+# --- Configurações ---
+logging.basicConfig(format='%(asctime)s: %(name)s: %(levelname)s: %(message)s', level=logging.INFO, datefmt='%H:%M:%S')
+logger = logging.getLogger('VendasSystemTest')
+
+BASE_URL = os.getenv('APP_URL', 'http://127.0.0.1:8080')
+DEFAULT_TIMEOUT = 10
+IS_CONTAINER = os.getenv('CONTAINER', 'false').lower() == 'true'
+STEP_DELAY = 0.5 # Pequena pausa para visualização
+
+# --- Credenciais de Teste ---
+ADMIN_EMAIL = "admin@teste.com"
+VENDEDOR_EMAIL = "vendedor@teste.com"
+ESTOQUISTA_EMAIL = "estoquista@teste.com"
+TEST_PASS = "senha123"
+
+# --- Variáveis de Ambiente do Banco de Dados ---
+DB_NAME = os.getenv('DB_NAME', 'wallmart_test')
+DB_USER = os.getenv('DB_USER', 'me')
+DB_PASS = os.getenv('DB_PASS', '1q2w3e')
+DB_HOST = os.getenv('DB_HOST', 'localhost')
+DB_PORT = os.getenv('DB_PORT', '5432')
+
+
+class VendasSystemTest(unittest.TestCase):
+    
+    @classmethod
+    def setUpClass(cls):
+        """Configura o ambiente uma vez antes de todos os testes."""
+        options = webdriver.ChromeOptions()
+        options.add_argument("--start-maximized")
+
+        if IS_CONTAINER:
+            logger.info("A rodar em modo container (headless).")
+            options.add_argument('--headless')
+            options.add_argument('--no-sandbox')
+            options.add_argument('--disable-dev-shm-usage')
+            options.add_argument('--window-size=1920,1080')
+            
+        try:
+            cls.browser = webdriver.Chrome(options=options)
+            cls.wait = WebDriverWait(cls.browser, DEFAULT_TIMEOUT)
+        except Exception as e:
+            logger.error(f"Não foi possível iniciar o ChromeDriver: {e}")
+            cls.browser = None
+            sys.exit(1)
+            
+        # Prepara a base de dados de teste
+        cls.prepare_test_database()
+
+    @classmethod
+    def tearDownClass(cls):
+        """Encerra o navegador e apaga a base de dados de teste."""
+        if cls.browser:
+            cls.browser.quit()
+        
+        cls.cleanup_test_database()
+        logger.info("Navegador encerrado e base de dados de teste apagada.")
+
+    @classmethod
+    def prepare_test_database(cls):
+        """Cria a base de dados e popula com dados essenciais."""
+        conn = None
+        try:
+            conn = psycopg2.connect(dbname='postgres', user=DB_USER, password=DB_PASS, host=DB_HOST, port=DB_PORT)
+            conn.autocommit = True
+            cursor = conn.cursor()
+            cursor.execute(f"DROP DATABASE IF EXISTS {DB_NAME} WITH (FORCE);")
+            cursor.execute(f"CREATE DATABASE {DB_NAME};")
+            logger.info(f"Base de dados de teste '{DB_NAME}' criada com sucesso.")
+        except psycopg2.Error as e:
+            logger.error(f"Erro ao preparar a base de dados: {e}")
+            sys.exit(1)
+        finally:
+            if conn:
+                conn.close()
+
+        project_root = os.path.abspath(os.path.dirname(__file__))
+        env_vars = f"DB_HOST={DB_HOST} DB_PORT={DB_PORT} DB_USER={DB_USER} DB_PASS={DB_PASS} DB_NAME={DB_NAME}"
+        
+        logger.info("A executar data_manager para inicializar o esquema...")
+        os.system(f'cd {project_root} && {env_vars} go run ./cmd/data_manager/main.go -init')
+        
+        logger.info("A executar populando_banco para adicionar dados de teste...")
+        os.system(f'cd {project_root} && {env_vars} go run ./cmd/populando_banco/main.go')
+        
+        time.sleep(1)
+
+        filial_id = cls.get_first_filial_id()
+        if not filial_id:
+            logger.error("Nenhuma filial encontrada para associar aos utilizadores de teste.")
+            sys.exit(1)
+            
+        os.system(f'cd {project_root} && {env_vars} go run ./cmd/create_user/main.go -name="Admin Teste" -email="{ADMIN_EMAIL}" -password="{TEST_PASS}" -role="admin"')
+        os.system(f'cd {project_root} && {env_vars} go run ./cmd/create_user/main.go -name="Vendedor Teste" -email="{VENDEDOR_EMAIL}" -password="{TEST_PASS}" -role="vendedor" -filialid="{filial_id}"')
+        os.system(f'cd {project_root} && {env_vars} go run ./cmd/create_user/main.go -name="Estoquista Teste" -email="{ESTOQUISTA_EMAIL}" -password="{TEST_PASS}" -role="estoquista" -filialid="{filial_id}"')
+        logger.info("Utilizadores de teste criados.")
+
+    @classmethod
+    def cleanup_test_database(cls):
+        """Apaga a base de dados de teste."""
+        conn = None
+        try:
+            conn = psycopg2.connect(dbname='postgres', user=DB_USER, password=DB_PASS, host=DB_HOST, port=DB_PORT)
+            conn.autocommit = True
+            cursor = conn.cursor()
+            cursor.execute(f"DROP DATABASE IF EXISTS {DB_NAME} WITH (FORCE);")
+            logger.info(f"Base de dados de teste '{DB_NAME}' apagada.")
+        except psycopg2.Error as e:
+            logger.warning(f"Aviso: Não foi possível apagar a base de dados de teste: {e}")
+        finally:
+            if conn:
+                conn.close()
+    
+    @classmethod
+    def get_first_filial_id(cls):
+        """Obtém o ID da primeira filial para usar nos testes."""
+        conn = None
+        try:
+            conn = psycopg2.connect(dbname=DB_NAME, user=DB_USER, password=DB_PASS, host=DB_HOST, port=DB_PORT)
+            cursor = conn.cursor()
+            cursor.execute("SELECT id FROM filiais LIMIT 1;")
+            result = cursor.fetchone()
+            return str(result[0]) if result else None
+        except psycopg2.Error as e:
+            logger.error(f"Erro ao obter ID da filial: {e}")
+            return None
+        finally:
+            if conn:
+                conn.close()
+
+    def _login(self, email, password):
+        """Função auxiliar para fazer login."""
+        self.browser.get(f'{BASE_URL}/login')
+        self.wait.until(EC.visibility_of_element_located((By.ID, "email"))).send_keys(email)
+        self.browser.find_element(By.ID, "password").send_keys(password)
+        self.browser.find_element(By.CSS_SELECTOR, "button[type='submit']").click()
+
+    def _delay(self):
+        """Pausa a execução para facilitar a visualização."""
+        time.sleep(STEP_DELAY)
+
+    def test_01_admin_full_flow(self):
+        """Testa o login do admin e o fluxo de CRUD de utilizadores e sócios."""
+        logger.info("--- INICIANDO TESTE 01: FLUXO COMPLETO DO ADMIN ---")
+        self._login(ADMIN_EMAIL, TEST_PASS)
+        
+        self.wait.until(EC.url_contains('/admin/dashboard'))
+        self.wait.until(EC.title_contains("Painel do Administrador"))
+        logger.info("SUCESSO: Login e redirecionamento para o Painel Administrativo corretos.")
+        self._delay()
+
+        # --- Teste de CRUD de Utilizador ---
+        timestamp = int(time.time())
+        novo_user_email = f"user.teste.{timestamp}@email.com"
+        logger.info(f"A adicionar novo utilizador: {novo_user_email}")
+        
+        self.wait.until(EC.element_to_be_clickable((By.XPATH, "//button[normalize-space()='+ Adicionar Utilizador']"))).click()
+        modal_user = self.wait.until(EC.visibility_of_element_located((By.ID, "addUserModal")))
+        modal_user.find_element(By.NAME, "name").send_keys("Utilizador de Teste CRUD")
+        modal_user.find_element(By.NAME, "email").send_keys(novo_user_email)
+        modal_user.find_element(By.NAME, "password").send_keys("senha123")
+        Select(modal_user.find_element(By.NAME, "role")).select_by_visible_text("Vendedor")
+        modal_user.find_element(By.XPATH, ".//button[text()='Guardar']").click()
+        
+        self.wait.until(EC.visibility_of_element_located((By.XPATH, f"//td[text()='{novo_user_email}']")))
+        logger.info("SUCESSO: Novo utilizador encontrado na tabela.")
+        self._delay()
+
+        logger.info(f"A remover o utilizador: {novo_user_email}")
+        linha_user = self.browser.find_element(By.XPATH, f"//tr[contains(., '{novo_user_email}')]")
+        linha_user.find_element(By.XPATH, ".//button[normalize-space()='Remover']").click()
+        
+        # CORREÇÃO: Espera pelo alerta de confirmação e aceita-o.
+        self.wait.until(EC.alert_is_present()).accept()
+        
+        self.assertTrue(self.wait.until(EC.staleness_of(linha_user)))
+        logger.info("SUCESSO: Utilizador removido.")
+        self._delay()
+
+        # --- Teste de CRUD de Sócio ---
+        logger.info("A navegar para a página de Dados da Empresa...")
+        self.browser.find_element(By.LINK_TEXT, "Dados da Empresa").click()
+        self.wait.until(EC.url_contains('/admin/empresa'))
+        self.wait.until(EC.title_contains("Dados da Empresa"))
+        logger.info("SUCESSO: Navegou para a página da empresa.")
+        
+        novo_socio_cpf = f"123.456.789-{timestamp % 100}"
+        logger.info(f"A adicionar novo sócio com CPF: {novo_socio_cpf}")
+        
+        self.wait.until(EC.element_to_be_clickable((By.XPATH, "//button[normalize-space()='+ Adicionar Sócio']"))).click()
+        modal_socio = self.wait.until(EC.visibility_of_element_located((By.ID, "addSocioModal")))
+        modal_socio.find_element(By.NAME, "nome").send_keys("Sócio de Teste CRUD")
+        modal_socio.find_element(By.NAME, "cpf").send_keys(novo_socio_cpf)
+        modal_socio.find_element(By.XPATH, ".//button[text()='Adicionar Sócio']").click()
+        
+        self.wait.until(EC.visibility_of_element_located((By.XPATH, f"//td[text()='{novo_socio_cpf}']")))
+        logger.info("SUCESSO: Novo sócio encontrado na tabela.")
+        self._delay()
+
+        logger.info(f"A remover o sócio com CPF: {novo_socio_cpf}")
+        linha_socio = self.browser.find_element(By.XPATH, f"//tr[contains(., '{novo_socio_cpf}')]")
+        linha_socio.find_element(By.XPATH, ".//button[normalize-space()='Remover']").click()
+        
+        # CORREÇÃO: Espera pelo alerta de confirmação e aceita-o.
+        self.wait.until(EC.alert_is_present()).accept()
+
+        self.assertTrue(self.wait.until(EC.staleness_of(linha_socio)))
+        logger.info("SUCESSO: Sócio removido.")
+
+    def test_02_vendedor_login_and_sale(self):
+        """Testa o login do vendedor e simula uma venda completa."""
+        logger.info("--- INICIANDO TESTE 02: FLUXO DO VENDEDOR ---")
+        self._login(VENDEDOR_EMAIL, TEST_PASS)
+
+        logger.info("A verificar o redirecionamento para o Terminal de Vendas...")
+        self.wait.until(EC.url_contains('/vendas/terminal'))
+        self.wait.until(EC.title_contains("Terminal de Vendas"))
+        logger.info("SUCESSO: Redirecionado corretamente.")
+        
+        search_box = self.wait.until(EC.visibility_of_element_located((By.ID, "product-search")))
+        
+        logger.info("A procurar por um produto...")
+        search_box.send_keys("Arroz")
+        
+        primeiro_resultado = self.wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "#search-results div")))
+        nome_produto = primeiro_resultado.text.split(' - ')[0]
+        logger.info(f"A adicionar o produto '{nome_produto}' ao carrinho.")
+        primeiro_resultado.click()
+        self._delay()
+
+        logger.info("A verificar se o item está no carrinho...")
+        cart_item = self.wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "#cart-items tr")))
+        self.assertIn(nome_produto, cart_item.text)
+        total_display = self.browser.find_element(By.ID, "total-display").text
+        self.assertNotEqual(total_display, "R$ 0,00")
+        logger.info(f"SUCESSO: Item adicionado. Total: {total_display}")
+        self._delay()
+        
+        logger.info("A finalizar a venda...")
+        self.browser.find_element(By.ID, "finalize-sale-btn").click()
+        
+        try:
+            alert = self.wait.until(EC.alert_is_present())
+            alert_text = alert.text
+            alert.accept()
+            self.assertIn("Venda finalizada com sucesso!", alert_text)
+            logger.info("SUCESSO: Venda finalizada.")
+        except TimeoutException:
+            self.fail("O alerta de sucesso da venda não apareceu.")
+
+    def test_03_estoquista_login_and_stock_management(self):
+        """Testa o login do estoquista e as funcionalidades de gestão de stock."""
+        logger.info("--- INICIANDO TESTE 03: FLUXO DO ESTOQUISTA ---")
+        self._login(ESTOQUISTA_EMAIL, TEST_PASS)
+
+        logger.info("A verificar o redirecionamento para o Painel de Stock...")
+        self.wait.until(EC.url_contains('/estoque/dashboard'))
+        self.wait.until(EC.title_contains("Painel de Stock"))
+        logger.info("SUCESSO: Redirecionado corretamente.")
+        
+        # --- Teste de Adição de Stock a Produto Existente ---
+        logger.info("A testar a adição de stock a um produto existente...")
+        
+        primeira_linha = self.wait.until(EC.visibility_of_element_located((By.XPATH, "//table/tbody/tr[1]")))
+        nome_produto_existente = primeira_linha.find_element(By.XPATH, "./td[1]").text
+        quantidade_inicial = int(primeira_linha.find_element(By.XPATH, "./td[3]").text)
+        
+        add_stock_button = self.wait.until(EC.element_to_be_clickable((By.XPATH, "//button[normalize-space()='+ Adicionar Stock']")))
+        add_stock_button.click()
+        
+        modal = self.wait.until(EC.visibility_of_element_located((By.ID, "addStockModal")))
+        Select(modal.find_element(By.NAME, "product_id")).select_by_visible_text(nome_produto_existente)
+        modal.find_element(By.NAME, "quantity").send_keys("50")
+        modal.find_element(By.XPATH, ".//button[text()='Adicionar']").click()
+        
+        self.wait.until(EC.visibility_of_element_located((By.XPATH, "//*[contains(text(), 'Stock adicionado com sucesso!')]")))
+        logger.info("SUCESSO: Mensagem de sucesso ao adicionar stock exibida.")
+        
+        linha_atualizada = self.wait.until(EC.visibility_of_element_located((By.XPATH, f"//tr[contains(., '{nome_produto_existente}')]")))
+        quantidade_final = int(linha_atualizada.find_element(By.XPATH, "./td[3]").text)
+        self.assertEqual(quantidade_final, quantidade_inicial + 50)
+        logger.info("SUCESSO: A quantidade do produto existente foi atualizada corretamente.")
+        self._delay()
+
+        # --- Teste de Criação de Novo Produto com Stock Inicial ---
+        logger.info("A testar a criação de um novo produto com stock inicial...")
+        timestamp = int(time.time())
+        nome_novo_produto = f"Produto Teste Selenium {timestamp}"
+
+        add_stock_button = self.wait.until(EC.element_to_be_clickable((By.XPATH, "//button[normalize-space()='+ Adicionar Stock']")))
+        add_stock_button.click()
+        modal = self.wait.until(EC.visibility_of_element_located((By.ID, "addStockModal")))
+        
+        Select(modal.find_element(By.NAME, "add_type")).select_by_visible_text("Criar Novo Produto")
+        
+        self.wait.until(EC.visibility_of_element_located((By.ID, "newProductFields")))
+        modal.find_element(By.NAME, "new_product_name").send_keys(nome_novo_produto)
+        modal.find_element(By.NAME, "new_product_barcode").send_keys(str(timestamp))
+        modal.find_element(By.NAME, "new_product_price").send_keys("19.99")
+        modal.find_element(By.NAME, "quantity").send_keys("150")
+        modal.find_element(By.XPATH, ".//button[text()='Adicionar']").click()
+
+        self.wait.until(EC.visibility_of_element_located((By.XPATH, "//*[contains(text(), 'Stock adicionado com sucesso!')]")))
+        logger.info("SUCESSO: Mensagem de sucesso ao criar novo produto exibida.")
+        
+        self.browser.find_element(By.ID, "search_product").send_keys(nome_novo_produto)
+        self.browser.find_element(By.XPATH, "//button[text()='Filtrar']").click()
+
+        linha_novo_produto = self.wait.until(EC.visibility_of_element_located((By.XPATH, f"//tr[contains(., '{nome_novo_produto}')]")))
+        quantidade_novo_produto = int(linha_novo_produto.find_element(By.XPATH, "./td[3]").text)
+        self.assertEqual(quantidade_novo_produto, 150)
+        logger.info("SUCESSO: O novo produto foi criado e aparece na lista com a quantidade correta.")
+        self._delay()
+
+
+if __name__ == '__main__':
+    unittest.main(verbosity=2, failfast=True)

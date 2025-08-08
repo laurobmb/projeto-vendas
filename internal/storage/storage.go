@@ -16,6 +16,40 @@ import (
 	"projeto-vendas/internal/models"
 )
 
+// CORREÇÃO: A interface Store foi atualizada para incluir todas as funções necessárias.
+type Store interface {
+	GetUserByEmail(email string) (*models.User, error)
+	GetFilialByID(id string) (*models.Filial, error)
+	CountUsers() (int, error)
+	GetUsersPaginated(limit, offset int) ([]models.User, error)
+	CountProducts(searchQuery string) (int, error)
+	GetProductsPaginatedAndFiltered(searchQuery string, limit, offset int) ([]models.Product, error)
+	GetAllFiliais() ([]models.Filial, error)
+	UpdateUser(userID string, user models.User, newPassword string) error
+	CountSales(filialID string) (int, error)
+	GetSalesPaginated(filialID string, limit, offset int) ([]models.SaleReportItem, error)
+	SearchProductsForSale(query string, filialID uuid.UUID) ([]models.Product, error)
+	RegisterSale(sale models.Venda, items []models.ItemVenda) error
+	CreateProductWithInitialStock(product models.Product, filialID string, quantity int) error
+	AddStockItem(productID, filialID string, quantity int) error
+	GetAllProductsSimple() ([]models.Product, error)
+	CountStockItems(filialID, searchQuery string) (int, error)
+	GetStockItemsPaginated(filialID, searchQuery string, limit, offset int) ([]models.StockViewItem, error)
+	UpdateStockQuantity(productID, filialID string, newQuantity int) error
+	AddUser(user models.User, password string) error
+	AddProduct(product models.Product) error
+	UpdateSocio(socioID string, socio models.Socio) error
+	GetEmpresa() (*models.Empresa, error)
+	UpsertEmpresa(empresa models.Empresa) error
+	GetSocios(empresaID uuid.UUID) ([]models.Socio, error)
+	AddSocio(socio models.Socio) error
+	DeleteSocioByID(id string) error
+	DeleteUserByID(id string) error
+	DeleteProductByID(id string) error
+	GetProductStockByFilial(productID string) ([]models.StockDetail, error)
+	AdjustStockQuantity(productID, filialID string, quantityToRemove int) error
+}
+
 type Storage struct {
 	Dbpool *pgxpool.Pool
 }
@@ -33,53 +67,37 @@ func NewStorage() (*Storage, error) {
 	return &Storage{Dbpool: pool}, nil
 }
 
-// NOVO: Atualiza os dados de um utilizador e, opcionalmente, a sua senha.
-func (s *Storage) UpdateUser(userID string, user models.User, newPassword string) error {
-	tx, err := s.Dbpool.Begin(context.Background())
+// ... (todas as outras funções do ficheiro storage.go permanecem aqui, sem alterações)
+
+
+func (s *Storage) UpdateSocio(socioID string, socio models.Socio) error {
+	sql := `
+		UPDATE socios 
+		SET nome = $1, telefone = $2, idade = $3, email = $4, cpf = $5
+		WHERE id = $6
+	`
+	cmdTag, err := s.Dbpool.Exec(context.Background(), sql, socio.Nome, socio.Telefone, socio.Idade, socio.Email, socio.CPF, socioID)
 	if err != nil {
-		return fmt.Errorf("não foi possível iniciar a transação: %w", err)
+		return err
 	}
-	defer tx.Rollback(context.Background())
-
-	// 1. Atualiza os detalhes principais do utilizador.
-	sqlDetails := `UPDATE usuarios SET nome = $1, email = $2, cargo = $3, filial_id = $4 WHERE id = $5`
-	_, err = tx.Exec(context.Background(), sqlDetails, user.Nome, user.Email, user.Cargo, user.FilialID, userID)
-	if err != nil {
-		return fmt.Errorf("falha ao atualizar detalhes do utilizador: %w", err)
+	if cmdTag.RowsAffected() == 0 {
+		return errors.New("nenhum sócio foi atualizado (ID não encontrado?)")
 	}
-
-	// 2. Se uma nova senha for fornecida, atualiza o hash da senha.
-	if newPassword != "" {
-		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
-		if err != nil {
-			return fmt.Errorf("falha ao gerar hash da nova senha: %w", err)
-		}
-		sqlPass := `UPDATE usuarios SET senha_hash = $1 WHERE id = $2`
-		_, err = tx.Exec(context.Background(), sqlPass, string(hashedPassword), userID)
-		if err != nil {
-			return fmt.Errorf("falha ao atualizar a senha do utilizador: %w", err)
-		}
-	}
-
-	return tx.Commit(context.Background())
+	return nil
 }
 
-// NOVO: Conta o número de vendas, opcionalmente filtrando por filial.
 func (s *Storage) CountSales(filialID string) (int, error) {
 	var count int
 	sql := `SELECT COUNT(*) FROM vendas`
 	var args []interface{}
-	
 	if filialID != "" {
 		sql += " WHERE filial_id = $1"
 		args = append(args, filialID)
 	}
-
 	err := s.Dbpool.QueryRow(context.Background(), sql, args...).Scan(&count)
 	return count, err
 }
 
-// NOVO: Busca os dados de vendas de forma paginada, com joins.
 func (s *Storage) GetSalesPaginated(filialID string, limit, offset int) ([]models.SaleReportItem, error) {
 	var sales []models.SaleReportItem
 	sql := `
@@ -90,19 +108,15 @@ func (s *Storage) GetSalesPaginated(filialID string, limit, offset int) ([]model
 	`
 	args := []interface{}{limit, offset}
 	argCount := 2
-
 	if filialID != "" {
 		argCount++
 		sql += fmt.Sprintf(" WHERE v.filial_id = $%d", argCount)
 		args = append(args, filialID)
 	}
-
 	sql += " ORDER BY v.data_venda DESC LIMIT $1 OFFSET $2"
-	
 	rows, err := s.Dbpool.Query(context.Background(), sql, args...)
 	if err != nil { return nil, err }
 	defer rows.Close()
-
 	for rows.Next() {
 		var item models.SaleReportItem
 		if err := rows.Scan(&item.VendaID, &item.DataVenda, &item.FilialNome, &item.VendedorNome, &item.TotalVenda); err != nil {
@@ -113,7 +127,6 @@ func (s *Storage) GetSalesPaginated(filialID string, limit, offset int) ([]model
 	return sales, nil
 }
 
-// Busca produtos por nome ou código de barras para o terminal de vendas.
 func (s *Storage) SearchProductsForSale(query string, filialID uuid.UUID) ([]models.Product, error) {
 	var products []models.Product
 	sql := `
@@ -126,7 +139,6 @@ func (s *Storage) SearchProductsForSale(query string, filialID uuid.UUID) ([]mod
 	rows, err := s.Dbpool.Query(context.Background(), sql, filialID, "%"+query+"%", query)
 	if err != nil { return nil, err }
 	defer rows.Close()
-
 	for rows.Next() {
 		var p models.Product
 		if err := rows.Scan(&p.ID, &p.Nome, &p.CodigoBarras, &p.PrecoSugerido); err != nil { return nil, err }
@@ -135,22 +147,18 @@ func (s *Storage) SearchProductsForSale(query string, filialID uuid.UUID) ([]mod
 	return products, nil
 }
 
-// Regista uma venda e atualiza o stock numa única transação.
 func (s *Storage) RegisterSale(sale models.Venda, items []models.ItemVenda) error {
 	tx, err := s.Dbpool.Begin(context.Background())
 	if err != nil { return fmt.Errorf("erro ao iniciar transação: %w", err) }
 	defer tx.Rollback(context.Background())
-
 	var vendaID uuid.UUID
 	sqlVenda := `INSERT INTO vendas (usuario_id, filial_id, total_venda) VALUES ($1, $2, $3) RETURNING id`
 	err = tx.QueryRow(context.Background(), sqlVenda, sale.UsuarioID, sale.FilialID, sale.TotalVenda).Scan(&vendaID)
 	if err != nil { return fmt.Errorf("erro ao inserir venda: %w", err) }
-
 	for _, item := range items {
 		sqlItem := `INSERT INTO itens_venda (venda_id, produto_id, quantidade, preco_unitario) VALUES ($1, $2, $3, $4)`
 		_, err := tx.Exec(context.Background(), sqlItem, vendaID, item.ProdutoID, item.Quantidade, item.PrecoUnitario)
 		if err != nil { return fmt.Errorf("erro ao inserir item %s: %w", item.ProdutoID, err) }
-
 		sqlStock := `
 			UPDATE estoque_filiais SET quantidade = quantidade - $1
 			WHERE produto_id = $2 AND filial_id = $3 AND quantidade >= $1
@@ -161,11 +169,9 @@ func (s *Storage) RegisterSale(sale models.Venda, items []models.ItemVenda) erro
 			return fmt.Errorf("stock insuficiente para o produto %s na filial %s", item.ProdutoID, sale.FilialID)
 		}
 	}
-
 	return tx.Commit(context.Background())
 }
 
-// Obtém os dados de uma filial pelo seu ID.
 func (s *Storage) GetFilialByID(id string) (*models.Filial, error) {
 	var filial models.Filial
 	sql := `SELECT id, nome FROM filiais WHERE id = $1`
@@ -180,20 +186,17 @@ func (s *Storage) CreateProductWithInitialStock(product models.Product, filialID
 		return fmt.Errorf("não foi possível iniciar a transação: %w", err)
 	}
 	defer tx.Rollback(context.Background())
-
 	var newProductID string
 	sqlProduct := `INSERT INTO produtos (nome, descricao, codigo_barras, preco_sugerido) VALUES ($1, $2, $3, $4) RETURNING id`
 	err = tx.QueryRow(context.Background(), sqlProduct, product.Nome, product.Descricao, product.CodigoBarras, product.PrecoSugerido).Scan(&newProductID)
 	if err != nil {
 		return fmt.Errorf("falha ao inserir o produto na transação: %w", err)
 	}
-
 	sqlStock := `INSERT INTO estoque_filiais (produto_id, filial_id, quantidade) VALUES ($1, $2, $3)`
 	_, err = tx.Exec(context.Background(), sqlStock, newProductID, filialID, quantity)
 	if err != nil {
 		return fmt.Errorf("falha ao inserir o stock na transação: %w", err)
 	}
-
 	return tx.Commit(context.Background())
 }
 
@@ -233,12 +236,12 @@ func (s *Storage) CountStockItems(filialID, searchQuery string) (int, error) {
 	}
 	if searchQuery != "" {
 		if len(args) > 0 {
-			whereClauses += " AND p.nome ILIKE $"
+			whereClauses += " AND"
 		} else {
-			whereClauses += " WHERE p.nome ILIKE $"
+			whereClauses += " WHERE"
 		}
-		whereClauses += fmt.Sprintf("%d", len(args)+1)
-		args = append(args, "%"+searchQuery+"%")
+		whereClauses += fmt.Sprintf(" (p.nome ILIKE $%d OR p.codigo_barras = $%d)", len(args)+1, len(args)+2)
+		args = append(args, "%"+searchQuery+"%", searchQuery)
 	}
 	err := s.Dbpool.QueryRow(context.Background(), sql+whereClauses, args...).Scan(&count)
 	return count, err
@@ -253,9 +256,8 @@ func (s *Storage) GetStockItemsPaginated(filialID, searchQuery string, limit, of
 		JOIN filiais f ON ef.filial_id = f.id
 	`
 	args := []interface{}{limit, offset}
-	argCount := 2 // Os placeholders $1 e $2 são para LIMIT e OFFSET
+	argCount := 2
 	whereClauses := ""
-
 	if filialID != "" {
 		argCount++
 		whereClauses += fmt.Sprintf(" WHERE ef.filial_id = $%d", argCount)
@@ -267,17 +269,13 @@ func (s *Storage) GetStockItemsPaginated(filialID, searchQuery string, limit, of
 		} else {
 			whereClauses += " WHERE"
 		}
-		// Usa dois placeholders distintos ($argCount+1 e $argCount+2) para os dois argumentos da busca
 		whereClauses += fmt.Sprintf(" (p.nome ILIKE $%d OR p.codigo_barras = $%d)", argCount+1, argCount+2)
 		args = append(args, "%"+searchQuery+"%", searchQuery)
 	}
-
 	sql += whereClauses + " ORDER BY p.nome, f.nome LIMIT $1 OFFSET $2"
-	
 	rows, err := s.Dbpool.Query(context.Background(), sql, args...)
 	if err != nil { return nil, err }
 	defer rows.Close()
-
 	for rows.Next() {
 		var item models.StockViewItem
 		if err := rows.Scan(&item.ProdutoID, &item.ProdutoNome, &item.CodigoBarras, &item.FilialID, &item.FilialNome, &item.Quantidade); err != nil {
@@ -324,7 +322,6 @@ func (s *Storage) GetProductsPaginatedAndFiltered(searchQuery string, limit, off
 	rows, err := s.Dbpool.Query(context.Background(), sql, args...)
 	if err != nil { return nil, err }
 	defer rows.Close()
-
 	for rows.Next() {
 		var p models.Product
 		if err := rows.Scan(&p.ID, &p.Nome, &p.Descricao, &p.CodigoBarras, &p.PrecoSugerido, &p.TotalEstoque, &p.ValorTotalEstoque); err != nil { return nil, err }
@@ -455,3 +452,87 @@ func (s *Storage) AddProduct(product models.Product) error {
 	return err
 }
 
+func (s *Storage) UpdateUser(userID string, user models.User, newPassword string) error {
+	tx, err := s.Dbpool.Begin(context.Background())
+	if err != nil {
+		return fmt.Errorf("não foi possível iniciar a transação: %w", err)
+	}
+	defer tx.Rollback(context.Background())
+
+	sqlDetails := `UPDATE usuarios SET nome = $1, email = $2, cargo = $3, filial_id = $4 WHERE id = $5`
+	_, err = tx.Exec(context.Background(), sqlDetails, user.Nome, user.Email, user.Cargo, user.FilialID, userID)
+	if err != nil {
+		return fmt.Errorf("falha ao atualizar detalhes do utilizador: %w", err)
+	}
+
+	if newPassword != "" {
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+		if err != nil {
+			return fmt.Errorf("falha ao gerar hash da nova senha: %w", err)
+		}
+		sqlPass := `UPDATE usuarios SET senha_hash = $1 WHERE id = $2`
+		_, err = tx.Exec(context.Background(), sqlPass, string(hashedPassword), userID)
+		if err != nil {
+			return fmt.Errorf("falha ao atualizar a senha do utilizador: %w", err)
+		}
+	}
+
+	return tx.Commit(context.Background())
+}
+
+func (s *Storage) GetEmpresa() (*models.Empresa, error) {
+	var empresa models.Empresa
+	sql := `SELECT id, razao_social, nome_fantasia, cnpj, endereco FROM empresa LIMIT 1`
+	err := s.Dbpool.QueryRow(context.Background(), sql).Scan(&empresa.ID, &empresa.RazaoSocial, &empresa.NomeFantasia, &empresa.CNPJ, &empresa.Endereco)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return &models.Empresa{}, nil
+		}
+		return nil, err
+	}
+	return &empresa, nil
+}
+
+func (s *Storage) UpsertEmpresa(empresa models.Empresa) error {
+	const fixedEmpresaID = "00000000-0000-0000-0000-000000000001"
+	
+	sql := `
+		INSERT INTO empresa (id, razao_social, nome_fantasia, cnpj, endereco)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (id) DO UPDATE SET
+			razao_social = EXCLUDED.razao_social,
+			nome_fantasia = EXCLUDED.nome_fantasia,
+			cnpj = EXCLUDED.cnpj,
+			endereco = EXCLUDED.endereco
+	`
+	_, err := s.Dbpool.Exec(context.Background(), sql, fixedEmpresaID, empresa.RazaoSocial, empresa.NomeFantasia, empresa.CNPJ, empresa.Endereco)
+	return err
+}
+
+func (s *Storage) GetSocios(empresaID uuid.UUID) ([]models.Socio, error) {
+	var socios []models.Socio
+	if empresaID == uuid.Nil {
+		return socios, nil
+	}
+	sql := `SELECT id, nome, telefone, idade, email, cpf FROM socios WHERE empresa_id = $1 ORDER BY nome`
+	rows, err := s.Dbpool.Query(context.Background(), sql, empresaID)
+	if err != nil { return nil, err }
+	defer rows.Close()
+	for rows.Next() {
+		var socio models.Socio
+		if err := rows.Scan(&socio.ID, &socio.Nome, &socio.Telefone, &socio.Idade, &socio.Email, &socio.CPF); err != nil { return nil, err }
+		socios = append(socios, socio)
+	}
+	return socios, nil
+}
+
+func (s *Storage) AddSocio(socio models.Socio) error {
+	sql := `INSERT INTO socios (empresa_id, nome, telefone, idade, email, cpf) VALUES ($1, $2, $3, $4, $5, $6)`
+	_, err := s.Dbpool.Exec(context.Background(), sql, socio.EmpresaID, socio.Nome, socio.Telefone, socio.Idade, socio.Email, socio.CPF)
+	return err
+}
+
+func (s *Storage) DeleteSocioByID(id string) error {
+	_, err := s.Dbpool.Exec(context.Background(), "DELETE FROM socios WHERE id = $1", id)
+	return err
+}

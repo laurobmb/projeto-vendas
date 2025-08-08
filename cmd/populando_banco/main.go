@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid" // CORREÇÃO: Removido o ".com" extra.
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 )
@@ -29,6 +29,24 @@ type Produto struct {
 type Filial struct {
 	ID   uuid.UUID
 	Nome string
+}
+
+// NOVO: Structs para Empresa e Sócio
+type Empresa struct {
+	ID           uuid.UUID
+	RazaoSocial  string
+	NomeFantasia string
+	CNPJ         string
+	Endereco     string
+}
+
+type Socio struct {
+	EmpresaID uuid.UUID
+	Nome      string
+	Telefone  string
+	Idade     int
+	Email     string
+	CPF       string
 }
 
 const (
@@ -51,23 +69,35 @@ var (
 func main() {
 	log.Println("🚀 Iniciando o programa para popular o banco de dados...")
 
-	// Conecta ao banco de dados usando um pool de conexões
 	dbpool := connectToDB()
 	defer dbpool.Close()
 
-	// Passo 1: Criar ou garantir que as 3 filiais de teste existem
+	// Passo 1: Criar ou garantir que a empresa e os sócios existem
+	empresaID, err := createOrGetEmpresa(dbpool)
+	if err != nil {
+		log.Fatalf("🚨 Erro ao criar/obter empresa: %v", err)
+	}
+	log.Println("✅ Garantida a existência dos dados da empresa.")
+
+	err = createSocios(dbpool, empresaID)
+	if err != nil {
+		log.Fatalf("🚨 Erro ao criar sócios: %v", err)
+	}
+	log.Println("✅ Garantida a existência dos sócios.")
+
+	// Passo 2: Criar ou garantir que as 3 filiais de teste existem
 	filiais, err := createOrGetFiliais(dbpool)
 	if err != nil {
 		log.Fatalf("🚨 Erro ao criar/obter filiais: %v", err)
 	}
 	log.Printf("✅ Garantida a existência de %d filiais para popular o stock.", len(filiais))
 
-	// Passo 2: Gerar a lista de produtos
+	// Passo 3: Gerar a lista de produtos
 	log.Println("⚙️ A gerar 2000 produtos variados...")
 	produtos := generateProdutos(numProdutos)
 	log.Println("✅ Lista de produtos gerada.")
 
-	// Passo 3: Inserir os produtos no banco de dados
+	// Passo 4: Inserir os produtos no banco de dados
 	log.Println("⏳ A inserir produtos no banco de dados... (Isto pode demorar um momento)")
 	err = insertProdutos(dbpool, produtos)
 	if err != nil {
@@ -75,7 +105,7 @@ func main() {
 	}
 	log.Println("✅ Produtos inseridos com sucesso na tabela 'produtos'.")
 
-	// Passo 4: Popular o stock para cada produto nas 3 filiais
+	// Passo 5: Popular o stock para cada produto nas 3 filiais
 	log.Println("⏳ A popular a tabela 'estoque_filiais'...")
 	err = populateEstoque(dbpool, produtos, filiais)
 	if err != nil {
@@ -85,11 +115,50 @@ func main() {
 	log.Println("🎉 Processo concluído!")
 }
 
-// createOrGetFiliais insere as 3 filiais padrão se não existirem e retorna-as.
+// NOVO: Cria/Atualiza o registo da empresa e retorna o seu ID.
+func createOrGetEmpresa(dbpool *pgxpool.Pool) (uuid.UUID, error) {
+	empresa := Empresa{
+		ID:           uuid.MustParse("00000000-0000-0000-0000-000000000001"), // ID Fixo
+		RazaoSocial:  "Meu Atacarejo LTDA",
+		NomeFantasia: "Atacarejo Preço Bom",
+		CNPJ:         "12.345.678/0001-99",
+		Endereco:     "Rua Principal, 123, Centro",
+	}
+
+	sql := `
+		INSERT INTO empresa (id, razao_social, nome_fantasia, cnpj, endereco)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (id) DO UPDATE SET
+			razao_social = EXCLUDED.razao_social, nome_fantasia = EXCLUDED.nome_fantasia,
+			cnpj = EXCLUDED.cnpj, endereco = EXCLUDED.endereco
+	`
+	_, err := dbpool.Exec(context.Background(), sql, empresa.ID, empresa.RazaoSocial, empresa.NomeFantasia, empresa.CNPJ, empresa.Endereco)
+	return empresa.ID, err
+}
+
+// NOVO: Cria os sócios de exemplo para a empresa.
+func createSocios(dbpool *pgxpool.Pool, empresaID uuid.UUID) error {
+	socios := []Socio{
+		{EmpresaID: empresaID, Nome: "Ana Silva", Telefone: "11 98765-4321", Idade: 45, Email: "ana.silva@email.com", CPF: "111.222.333-44"},
+		{EmpresaID: empresaID, Nome: "Bruno Costa", Telefone: "21 91234-5678", Idade: 52, Email: "bruno.costa@email.com", CPF: "222.333.444-55"},
+	}
+
+	for _, socio := range socios {
+		sql := `
+			INSERT INTO socios (empresa_id, nome, telefone, idade, email, cpf)
+			VALUES ($1, $2, $3, $4, $5, $6)
+			ON CONFLICT (cpf) DO NOTHING
+		`
+		_, err := dbpool.Exec(context.Background(), sql, socio.EmpresaID, socio.Nome, socio.Telefone, socio.Idade, socio.Email, socio.CPF)
+		if err != nil {
+			return fmt.Errorf("falha ao inserir sócio %s: %w", socio.Nome, err)
+		}
+	}
+	return nil
+}
+
 func createOrGetFiliais(dbpool *pgxpool.Pool) ([]Filial, error) {
 	nomesFiliais := []string{"Filial Centro", "Filial Zona Sul", "Filial Leste"}
-	
-	// Insere as filiais. Se já existirem (pelo nome UNIQUE), não faz nada.
 	for _, nome := range nomesFiliais {
 		sql := `INSERT INTO filiais (nome) VALUES ($1) ON CONFLICT (nome) DO NOTHING`
 		if _, err := dbpool.Exec(context.Background(), sql, nome); err != nil {
@@ -97,31 +166,25 @@ func createOrGetFiliais(dbpool *pgxpool.Pool) ([]Filial, error) {
 		}
 	}
 
-	// Agora, busca os dados das 3 filiais para obter os seus IDs.
 	var filiais []Filial
 	sqlBusca := `SELECT id, nome FROM filiais WHERE nome = ANY($1::text[])`
 	rows, err := dbpool.Query(context.Background(), sqlBusca, nomesFiliais)
-	if err != nil {
-		return nil, err
-	}
+	if err != nil { return nil, err }
 	defer rows.Close()
 
 	for rows.Next() {
 		var f Filial
-		if err := rows.Scan(&f.ID, &f.Nome); err != nil {
-			return nil, err
-		}
+		if err := rows.Scan(&f.ID, &f.Nome); err != nil { return nil, err }
 		filiais = append(filiais, f)
 	}
 
-	if len(filiais) != 3 {
-		return nil, errors.New("não foi possível criar ou encontrar as 3 filiais base")
+	if len(filiais) == 0 {
+		return nil, errors.New("nenhuma filial foi encontrada ou criada")
 	}
-
 	return filiais, nil
 }
 
-// generateProdutos cria uma lista de produtos com dados aleatórios.
+// ... (resto do ficheiro sem alterações)
 func generateProdutos(count int) []Produto {
 	produtos := make([]Produto, count)
 	for i := 0; i < count; i++ {
@@ -150,8 +213,6 @@ func generateProdutos(count int) []Produto {
 	}
 	return produtos
 }
-
-// insertProdutos insere uma lista de produtos no banco de dados usando concorrência.
 func insertProdutos(dbpool *pgxpool.Pool, produtos []Produto) error {
 	sqlStatement := `INSERT INTO produtos (id, nome, descricao, codigo_barras, preco_sugerido) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (nome) DO NOTHING`
 
@@ -177,8 +238,6 @@ func insertProdutos(dbpool *pgxpool.Pool, produtos []Produto) error {
 	wg.Wait()
 	return nil
 }
-
-// populateEstoque insere registos de stock para cada produto em cada filial.
 func populateEstoque(dbpool *pgxpool.Pool, produtos []Produto, filiais []Filial) error {
 	sqlStatement := `INSERT INTO estoque_filiais (produto_id, filial_id, quantidade) VALUES ($1, $2, $3) ON CONFLICT (produto_id, filial_id) DO UPDATE SET quantidade = EXCLUDED.quantidade`
 
@@ -212,8 +271,6 @@ func populateEstoque(dbpool *pgxpool.Pool, produtos []Produto, filiais []Filial)
 	wg.Wait()
 	return nil
 }
-
-// connectToDB cria e retorna um pool de conexões com o PostgreSQL.
 func connectToDB() *pgxpool.Pool {
 	err := godotenv.Load()
 	if err != nil {

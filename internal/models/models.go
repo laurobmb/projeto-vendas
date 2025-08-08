@@ -83,3 +83,23 @@ type SaleReportItem struct {
 	VendedorNome string
 	TotalVenda   float64
 }
+
+// NOVO: Struct para os dados da empresa.
+type Empresa struct {
+	ID           uuid.UUID
+	RazaoSocial  string
+	NomeFantasia string
+	CNPJ         string
+	Endereco     string
+}
+
+// NOVO: Struct para os dados de um sócio.
+type Socio struct {
+	ID        uuid.UUID
+	EmpresaID uuid.UUID
+	Nome      string
+	Telefone  string
+	Idade     int
+	Email     string
+	CPF       string
+}

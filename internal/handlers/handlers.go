@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
@@ -19,10 +20,55 @@ import (
 
 const PageLimit = 10
 type Handler struct {
-	Storage *storage.Storage
+	Storage storage.Store // ATUALIZADO: Depende da interface, não da struct.
 }
-func NewHandler(s *storage.Storage) *Handler {
+// CORREÇÃO: A função agora aceita a interface 'Store', tornando-a testável.
+func NewHandler(s storage.Store) *Handler {
 	return &Handler{Storage: s}
+}
+
+// CORREÇÃO: O middleware foi movido para aqui e tornado mais inteligente.
+func (h *Handler) AuthRequired(requiredRoles ...string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		session := sessions.Default(c)
+		userRole, ok := session.Get("userRole").(string)
+		isAPIRequest := strings.HasPrefix(c.Request.URL.Path, "/api/")
+
+		if !ok {
+			if isAPIRequest {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Não autorizado"})
+			} else {
+				c.Redirect(http.StatusFound, "/login")
+			}
+			c.Abort()
+			return
+		}
+		
+		hasPermission := false
+		for _, role := range requiredRoles {
+			if userRole == role {
+				hasPermission = true
+				break
+			}
+		}
+
+		if !hasPermission {
+			log.Printf("Acesso negado para o utilizador com cargo '%s'. Rota requer um dos seguintes cargos: %v", userRole, requiredRoles)
+			if isAPIRequest {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Acesso negado"})
+			} else {
+				c.HTML(http.StatusForbidden, "error.html", gin.H{
+					"title":        "Acesso Negado",
+					"StatusCode":   http.StatusForbidden,
+					"ErrorMessage": "Acesso Negado",
+				})
+			}
+			c.Abort()
+			return
+		}
+		
+		c.Next()
+	}
 }
 
 // getFlashes lê e apaga as mensagens flash da sessão.
@@ -486,4 +532,117 @@ func (h *Handler) HandleEditUser(c *gin.Context) {
     }
     session.Save()
     c.Redirect(http.StatusFound, "/admin/dashboard")
+}
+
+func (h *Handler) ShowEmpresaPage(c *gin.Context) {
+	session := sessions.Default(c)
+	empresa, err := h.Storage.GetEmpresa()
+	if err != nil {
+		log.Printf("Erro ao obter dados da empresa: %v", err)
+		c.HTML(http.StatusInternalServerError, "error.html", gin.H{"title": "Erro", "ErrorMessage": "Não foi possível carregar os dados da empresa."})
+		return
+	}
+	
+	socios, err := h.Storage.GetSocios(empresa.ID)
+	if err != nil {
+		log.Printf("Erro ao obter sócios: %v", err)
+	}
+
+	data := getFlashes(c)
+	data["title"] = "Dados da Empresa"
+	data["empresa"] = empresa
+	data["socios"] = socios
+	data["UserRole"] = session.Get("userRole")
+	data["UserName"] = session.Get("userName")
+	data["ActivePage"] = "empresa"
+	c.HTML(http.StatusOK, "empresa.html", data)
+}
+
+func (h *Handler) HandleUpdateEmpresa(c *gin.Context) {
+	session := sessions.Default(c)
+	empresaIDStr := c.PostForm("id")
+	var empresaID uuid.UUID
+	var err error
+	if empresaIDStr != "" {
+		empresaID, err = uuid.Parse(empresaIDStr)
+		if err != nil {
+			log.Printf("ID da empresa inválido: %v", err)
+		}
+	}
+	
+	empresa := models.Empresa{
+		ID:           empresaID,
+		RazaoSocial:  c.PostForm("razao_social"),
+		NomeFantasia: c.PostForm("nome_fantasia"),
+		CNPJ:         c.PostForm("cnpj"),
+		Endereco:     c.PostForm("endereco"),
+	}
+
+	err = h.Storage.UpsertEmpresa(empresa)
+	if err != nil {
+		session.AddFlash(fmt.Sprintf("Falha ao atualizar dados da empresa: %v", err), "error")
+	} else {
+		session.AddFlash("Dados da empresa atualizados com sucesso!", "success")
+	}
+	session.Save()
+	c.Redirect(http.StatusFound, "/admin/empresa")
+}
+
+func (h *Handler) HandleAddSocio(c *gin.Context) {
+	session := sessions.Default(c)
+	empresaID, _ := uuid.Parse(c.PostForm("empresa_id"))
+	idade, _ := strconv.Atoi(c.PostForm("idade"))
+
+	socio := models.Socio{
+		EmpresaID: empresaID,
+		Nome:      c.PostForm("nome"),
+		Telefone:  c.PostForm("telefone"),
+		Idade:     idade,
+		Email:     c.PostForm("email"),
+		CPF:       c.PostForm("cpf"),
+	}
+
+	err := h.Storage.AddSocio(socio)
+	if err != nil {
+		session.AddFlash(fmt.Sprintf("Falha ao adicionar sócio: %v", err), "error")
+	} else {
+		session.AddFlash("Sócio adicionado com sucesso!", "success")
+	}
+	session.Save()
+	c.Redirect(http.StatusFound, "/admin/empresa")
+}
+
+func (h *Handler) HandleDeleteSocio(c *gin.Context) {
+	session := sessions.Default(c)
+	err := h.Storage.DeleteSocioByID(c.Param("id"))
+	if err != nil {
+		session.AddFlash(fmt.Sprintf("Falha ao apagar sócio: %v", err), "error")
+	} else {
+		session.AddFlash("Sócio apagado com sucesso!", "success")
+	}
+	session.Save()
+	c.Redirect(http.StatusFound, "/admin/empresa")
+}
+
+func (h *Handler) HandleEditSocio(c *gin.Context) {
+	session := sessions.Default(c)
+	socioID := c.Param("id")
+	idade, _ := strconv.Atoi(c.PostForm("idade"))
+
+	socio := models.Socio{
+		Nome:     c.PostForm("nome"),
+		Telefone: c.PostForm("telefone"),
+		Idade:    idade,
+		Email:    c.PostForm("email"),
+		CPF:      c.PostForm("cpf"),
+	}
+
+	err := h.Storage.UpdateSocio(socioID, socio)
+	if err != nil {
+		session.AddFlash(fmt.Sprintf("Falha ao atualizar sócio: %v", err), "error")
+	} else {
+		session.AddFlash("Sócio atualizado com sucesso!", "success")
+	}
+	session.Save()
+	c.Redirect(http.StatusFound, "/admin/empresa")
 }

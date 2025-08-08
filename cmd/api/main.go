@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
+	"html/template"
 	"log"
 	"net/http"
 
@@ -13,17 +15,23 @@ import (
 )
 
 func main() {
+	// 1. Inicializa a camada de armazenamento (storage)
 	storageLayer, err := storage.NewStorage()
 	if err != nil {
 		log.Fatalf("Falha ao inicializar a camada de armazenamento: %v", err)
 	}
 	defer storageLayer.Dbpool.Close()
 
+	// 2. Inicializa a camada de handlers, injetando a dependência do storage
 	h := handlers.NewHandler(storageLayer)
+
+	// 3. Configura o servidor Gin
 	router := gin.Default()
 	store := cookie.NewStore([]byte("super-secret-key"))
 	router.Use(sessions.Sessions("mysession", store))
 	router.StaticFS("/static", http.Dir("web/static"))
+
+	// ATUALIZADO: Adicionada a função 'json' ao mapa de funções do template.
 	router.SetFuncMap(map[string]interface{}{
 		"dict": func(values ...interface{}) (map[string]interface{}, error) {
 			if len(values)%2 != 0 { return nil, errors.New("invalid dict call") }
@@ -35,6 +43,13 @@ func main() {
 			}
 			return dict, nil
 		},
+		"json": func(v interface{}) (template.JS, error) {
+			a, err := json.Marshal(v)
+			if err != nil {
+				return "", err
+			}
+			return template.JS(a), nil
+		},
 	})
 	router.LoadHTMLGlob("web/templates/*.html")
 
@@ -43,32 +58,34 @@ func main() {
 	router.POST("/login", h.HandleLogin)
 	router.GET("/logout", h.HandleLogout)
 
-
+	// --- Rotas Protegidas ---
 	stockRoutes := router.Group("/estoque")
-	stockRoutes.Use(AuthRequired("estoquista", "admin")) // Permite acesso a estoquistas e admins
+	stockRoutes.Use(AuthRequired("estoquista", "admin"))
 	{
 		stockRoutes.GET("/dashboard", h.ShowEstoquistaDashboard)
-		stockRoutes.POST("/add", h.HandleAddStockItem) // Reutiliza o handler de adicionar stock
+		stockRoutes.POST("/add", h.HandleAddStockItem)
 	}
-	// --- Rotas Protegidas ---
-	// Grupo de rotas para o Vendedor
+	
 	salesRoutes := router.Group("/vendas")
-	// CORREÇÃO: Permitir que tanto "vendedor" como "admin" acedam ao terminal.
 	salesRoutes.Use(AuthRequired("vendedor", "admin"))
 	{
 		salesRoutes.GET("/terminal", h.ShowSalesTerminalPage)
 	}
 
-	// Grupo de rotas para o Admin
 	adminRoutes := router.Group("/admin")
-	adminRoutes.Use(AuthRequired("admin"))
+	adminRoutes.Use(AuthRequired("admin")) 
 	{
 		adminRoutes.GET("/dashboard", h.ShowAdminDashboard)
 		adminRoutes.GET("/stock", h.ShowStockManagementPage)
-		adminRoutes.GET("/sales", h.ShowSalesReportPage) // NOVA ROTA
+		adminRoutes.GET("/sales", h.ShowSalesReportPage)
+		adminRoutes.GET("/empresa", h.ShowEmpresaPage)
+		adminRoutes.POST("/empresa/update", h.HandleUpdateEmpresa)
+		adminRoutes.POST("/socios/add", h.HandleAddSocio)
+		adminRoutes.POST("/socios/delete/:id", h.HandleDeleteSocio)
+		adminRoutes.POST("/socios/edit/:id", h.HandleEditSocio)
 		adminRoutes.POST("/users/add", h.HandleAddUser)
 		adminRoutes.POST("/users/delete/:id", h.HandleDeleteUser)
-		adminRoutes.POST("/users/edit/:id", h.HandleEditUser) // NOVA ROTA
+		adminRoutes.POST("/users/edit/:id", h.HandleEditUser)
 		adminRoutes.POST("/products/add", h.HandleAddProduct)
 		adminRoutes.POST("/products/delete/:id", h.HandleDeleteProduct)
 		adminRoutes.POST("/stock/update", h.HandleUpdateStock)
@@ -77,7 +94,6 @@ func main() {
 		adminRoutes.POST("/api/stock/adjust", h.HandleAdjustStock)
 	}
 
-	// API para o terminal de vendas (protegida para vendedores e admins)
 	apiRoutes := router.Group("/api")
 	apiRoutes.Use(AuthRequired("vendedor", "admin"))
 	{
@@ -109,7 +125,7 @@ func main() {
 	router.Run(":8080")
 }
 
-// ATUALIZADO: Middleware agora renderiza uma página de erro.
+// Middleware de autenticação que aceita múltiplos cargos.
 func AuthRequired(requiredRoles ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		session := sessions.Default(c)

@@ -103,6 +103,31 @@ CREATE TABLE IF NOT EXISTS itens_venda (
         REFERENCES produtos(id)
         ON DELETE RESTRICT
 );
+-- NOVAS TABELAS PARA DADOS DA EMPRESA --
+
+-- Tabela da Empresa (desenhada para ter apenas um registo)
+CREATE TABLE IF NOT EXISTS empresa (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    razao_social VARCHAR(255) NOT NULL,
+    nome_fantasia VARCHAR(255),
+    cnpj VARCHAR(18) UNIQUE NOT NULL,
+    endereco TEXT
+);
+
+-- Tabela de Sócios, ligados à empresa
+CREATE TABLE IF NOT EXISTS socios (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    empresa_id UUID NOT NULL,
+    nome VARCHAR(150) NOT NULL,
+    telefone VARCHAR(20),
+    idade INT,
+    email VARCHAR(150),
+    cpf VARCHAR(14) UNIQUE,
+    CONSTRAINT fk_empresa_socio
+        FOREIGN KEY(empresa_id)
+        REFERENCES empresa(id)
+        ON DELETE CASCADE
+);
 
 -- Índices para melhorar a performance
 CREATE INDEX IF NOT EXISTS idx_usuarios_email ON usuarios(email);

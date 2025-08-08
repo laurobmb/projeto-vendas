@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .title }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body class="bg-gray-50">
+    {{ template "_navbar.html" . }}
+
+    <main class="container mx-auto p-6">
+        {{ template "_messages.html" . }}
+        
+        <!-- Formulário de Dados da Empresa -->
+        <div class="bg-white p-6 rounded-lg shadow-lg mb-8">
+            <h2 class="text-2xl font-semibold mb-4 border-b pb-2">Dados da Empresa</h2>
+            <form action="/admin/empresa/update" method="POST">
+                <input type="hidden" name="id" value="{{ .empresa.ID }}">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Razão Social</label>
+                        <input type="text" name="razao_social" value="{{ .empresa.RazaoSocial }}" required class="w-full px-3 py-2 border rounded">
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Nome Fantasia</label>
+                        <input type="text" name="nome_fantasia" value="{{ .empresa.NomeFantasia }}" class="w-full px-3 py-2 border rounded">
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 text-sm font-bold mb-2">CNPJ</label>
+                        <input type="text" name="cnpj" value="{{ .empresa.CNPJ }}" required class="w-full px-3 py-2 border rounded">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Endereço</label>
+                        <textarea name="endereco" rows="3" class="w-full px-3 py-2 border rounded">{{ .empresa.Endereco }}</textarea>
+                    </div>
+                </div>
+                <div class="flex justify-end mt-6">
+                    <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">Guardar Dados da Empresa</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Secção de Sócios -->
+        <div class="bg-white p-6 rounded-lg shadow-lg">
+            <div class="flex justify-between items-center mb-4 border-b pb-2">
+                <h2 class="text-2xl font-semibold">Sócios</h2>
+                <button onclick="openModal('addSocioModal')" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded" {{ if not .empresa.ID }}disabled title="Guarde primeiro os dados da empresa para adicionar sócios"{{ end }}>
+                    + Adicionar Sócio
+                </button>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full bg-white">
+                    <thead class="bg-gray-200">
+                        <tr>
+                            <th class="py-2 px-4 text-left">Nome</th>
+                            <th class="py-2 px-4 text-left">Email</th>
+                            <th class="py-2 px-4 text-left">Telefone</th>
+                            <th class="py-2 px-4 text-left">CPF</th>
+                            <th class="py-2 px-4 text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{ range .socios }}
+                        <tr class="border-b hover:bg-gray-50">
+                            <td class="py-2 px-4">{{ .Nome }}</td>
+                            <td class="py-2 px-4">{{ .Email }}</td>
+                            <td class="py-2 px-4">{{ .Telefone }}</td>
+                            <td class="py-2 px-4 font-mono">{{ .CPF }}</td>
+                            <td class="py-2 px-4 text-center">
+                                <div class="flex justify-center items-center space-x-2">
+                                    <button onclick='openEditSocioModal(`{{ . | json }}`)' class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded text-sm">
+                                        Editar
+                                    </button>
+                                    <form action="/admin/socios/delete/{{ .ID }}" method="POST" onsubmit="return confirm('Tem a certeza que deseja apagar este sócio?');">
+                                        <button type="submit" class="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-3 rounded text-sm">
+                                            Remover
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {{ else }}
+                        <tr><td colspan="5" class="text-center py-4 text-gray-500">Nenhum sócio registado.</td></tr>
+                        {{ end }}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal Adicionar Sócio -->
+    <div id="addSocioModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-20">
+        <div class="bg-white p-8 rounded-lg shadow-2xl w-full max-w-2xl">
+            <h3 class="text-xl font-bold mb-4">Adicionar Novo Sócio</h3>
+            <form action="/admin/socios/add" method="POST">
+                <input type="hidden" name="empresa_id" value="{{ .empresa.ID }}">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="mb-4">
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Nome Completo</label>
+                        <input type="text" name="nome" required class="w-full px-3 py-2 border rounded">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Email</label>
+                        <input type="email" name="email" class="w-full px-3 py-2 border rounded">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Telefone</label>
+                        <input type="tel" name="telefone" class="w-full px-3 py-2 border rounded">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-gray-700 text-sm font-bold mb-2">CPF</label>
+                        <input type="text" name="cpf" class="w-full px-3 py-2 border rounded">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Idade</label>
+                        <input type="number" name="idade" class="w-full px-3 py-2 border rounded">
+                    </div>
+                </div>
+                <div class="flex justify-end space-x-4 mt-6">
+                    <button type="button" onclick="closeModal('addSocioModal')" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded">Cancelar</button>
+                    <button type="submit" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">Adicionar Sócio</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Editar Sócio -->
+    <div id="editSocioModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-20">
+        <div class="bg-white p-8 rounded-lg shadow-2xl w-full max-w-2xl">
+            <h3 class="text-xl font-bold mb-4">Editar Sócio</h3>
+            <form action="" method="POST"> <!-- A ação será definida pelo JavaScript -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="mb-4">
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Nome Completo</label>
+                        <input type="text" name="nome" required class="w-full px-3 py-2 border rounded">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Email</label>
+                        <input type="email" name="email" class="w-full px-3 py-2 border rounded">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Telefone</label>
+                        <input type="tel" name="telefone" class="w-full px-3 py-2 border rounded">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-gray-700 text-sm font-bold mb-2">CPF</label>
+                        <input type="text" name="cpf" class="w-full px-3 py-2 border rounded">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Idade</label>
+                        <input type="number" name="idade" class="w-full px-3 py-2 border rounded">
+                    </div>
+                </div>
+                <div class="flex justify-end space-x-4 mt-6">
+                    <button type="button" onclick="closeModal('editSocioModal')" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded">Cancelar</button>
+                    <button type="submit" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">Guardar Alterações</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <script src="/static/js/admin.js"></script>
+</body>
+</html>
