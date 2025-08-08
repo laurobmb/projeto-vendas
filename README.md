@@ -4,6 +4,69 @@ Com certeza\! Aqui está o conteúdo do `README.md` em formato cru, pronto para 
 
 Este é um sistema web completo para a gestão de um negócio de retalho com múltiplas filiais. A aplicação foi desenvolvida em Go (Golang) e utiliza PostgreSQL como base de dados. O sistema oferece diferentes painéis e funcionalidades baseados no cargo do utilizador (Administrador, Estoquista, Vendedor).
 
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relatório Visual dos Testes</title>
+</head>
+<body>
+    <h2 align="center">Relatório Visual dos Testes de Frontend</h2>
+    <table width="100%" border="1" style="border-collapse: collapse; margin: auto;">
+        <thead>
+            <tr style="background-color: #f2f2f2;">
+                <th style="padding: 10px; text-align: left;">Passo do Teste</th>
+                <th style="padding: 10px; text-align: left;">Passo Seguinte</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td style="padding: 10px;"><img src="photos/20250808-171135_00_tela_login_preenchida.png" alt="Tela de login preenchida" width="100%"></td>
+                <td style="padding: 10px;"><img src="photos/20250808-171135_01_admin_dashboard.png" alt="Dashboard do Admin" width="100%"></td>
+            </tr>
+            <tr>
+                <td style="padding: 10px;"><img src="photos/20250808-171136_02_admin_modal_adicionar_user.png" alt="Modal para adicionar utilizador" width="100%"></td>
+                <td style="padding: 10px;"><img src="photos/20250808-171137_03_admin_user_adicionado.png" alt="Utilizador adicionado" width="100%"></td>
+            </tr>
+            <tr>
+                <td style="padding: 10px;"><img src="photos/20250808-171138_04_admin_user_removido.png" alt="Utilizador removido" width="100%"></td>
+                <td style="padding: 10px;"><img src="photos/20250808-171138_05_admin_pagina_empresa.png" alt="Página de dados da empresa" width="100%"></td>
+            </tr>
+            <tr>
+                <td style="padding: 10px;"><img src="photos/20250808-171139_06_admin_modal_adicionar_socio.png" alt="Modal para adicionar sócio" width="100%"></td>
+                <td style="padding: 10px;"><img src="photos/20250808-171139_07_admin_socio_adicionado.png" alt="Sócio adicionado" width="100%"></td>
+            </tr>
+            <tr>
+                <td style="padding: 10px;"><img src="photos/20250808-171140_00_tela_login_preenchida.png" alt="Tela de login preenchida" width="100%"></td>
+                <td style="padding: 10px;"><img src="photos/20250808-171140_08_admin_socio_removido.png" alt="Sócio removido" width="100%"></td>
+            </tr>
+            <tr>
+                <td style="padding: 10px;"><img src="photos/20250808-171141_09_vendedor_terminal_vazio.png" alt="Terminal de vendas do vendedor (vazio)" width="100%"></td>
+                <td style="padding: 10px;"><img src="photos/20250808-171142_10_vendedor_item_no_carrinho.png" alt="Item adicionado ao carrinho" width="100%"></td>
+            </tr>
+            <tr>
+                <td style="padding: 10px;"><img src="photos/20250808-171143_00_tela_login_preenchida.png" alt="Tela de login preenchida" width="100%"></td>
+                <td style="padding: 10px;"><img src="photos/20250808-171143_11_vendedor_venda_finalizada.png" alt="Venda finalizada" width="100%"></td>
+            </tr>
+            <tr>
+                <td style="padding: 10px;"><img src="photos/20250808-171144_12_estoquista_dashboard.png" alt="Dashboard do estoquista" width="100%"></td>
+                <td style="padding: 10px;"><img src="photos/20250808-171144_13_estoquista_modal_adicionar_existente.png" alt="Modal para adicionar stock a produto existente" width="100%"></td>
+            </tr>
+            <tr>
+                <td style="padding: 10px;"><img src="photos/20250808-171145_14_estoquista_stock_adicionado_sucesso.png" alt="Mensagem de sucesso ao adicionar stock" width="100%"></td>
+                <td style="padding: 10px;"><img src="photos/20250808-171145_15_estoquista_modal_criar_novo.png" alt="Modal para criar novo produto" width="100%"></td>
+            </tr>
+            <tr>
+                <td style="padding: 10px;"><img src="photos/20250808-171146_16_estoquista_novo_produto_criado_sucesso.png" alt="Mensagem de sucesso ao criar novo produto" width="100%"></td>
+                <td style="padding: 10px;"></td> <!-- Célula vazia para manter o layout -->
+            </tr>
+        </tbody>
+    </table>
+</body>
+</html>
+
+
 ## Funcionalidades Principais
 
 * **Autenticação por Cargos:** Sistema de login seguro que direciona os utilizadores para painéis específicos:
