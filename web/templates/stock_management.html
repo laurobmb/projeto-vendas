@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .title }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body class="bg-gray-50">
+    {{ template "_navbar.html" . }}
+
+    <main class="container mx-auto p-6">
+        <div class="bg-white p-6 rounded-lg shadow-lg">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-4 border-b pb-2">
+                <h2 class="text-2xl font-semibold mb-2 md:mb-0">Gestão de Stock por Filial</h2>
+                <button onclick="openModal('addStockModal')" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
+                    + Adicionar Stock
+                </button>
+            </div>
+            
+            <!-- CORREÇÃO: O formulário foi ajustado para alinhar os itens corretamente. -->
+            <form action="/admin/stock" method="GET" class="flex flex-col md:flex-row items-end space-y-4 md:space-y-0 md:space-x-4 mb-6">
+                <div class="flex-1 w-full">
+                    <label for="filial_id" class="block text-sm font-medium text-gray-700">Filtrar por Filial</label>
+                    <select name="filial_id" id="filial_id" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md bg-white">
+                        <option value="">Todas as Filiais</option>
+                        {{ range .filiais }}
+                        <option value="{{ .ID }}" {{ if eq .ID.String $.Pagination.FilterID }}selected{{ end }}>{{ .Nome }}</option>
+                        {{ end }}
+                    </select>
+                </div>
+                <div class="flex-1 w-full">
+                    <label for="search_product" class="block text-sm font-medium text-gray-700">Procurar Produto</label>
+                    <!-- CORREÇÃO: Adicionadas classes de padding (py-2 px-3) para igualar a altura. -->
+                    <input type="search" name="search_product" id="search_product" value="{{ .Pagination.SearchQuery }}" placeholder="Nome do produto..." class="mt-1 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md py-2 px-3">
+                </div>
+                <div>
+                    <!-- CORREÇÃO: Botão com altura e cantos consistentes. -->
+                    <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md">Filtrar</button>
+                </div>
+            </form>
+
+            <!-- Tabela de Stock -->
+            <div class="overflow-x-auto">
+                <table class="min-w-full bg-white">
+                    <thead class="bg-gray-200">
+                        <tr>
+                            <th class="py-2 px-4 text-left">Produto</th>
+                            <th class="py-2 px-4 text-left">Filial</th>
+                            <th class="py-2 px-4 text-right">Stock Atual</th>
+                            <th class="py-2 px-4 text-right" style="width: 200px;">Nova Quantidade</th>
+                            <th class="py-2 px-4 text-center">Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{ range .stockItems }}
+                        <tr class="border-b hover:bg-gray-50">
+                            <form action="/admin/stock/update" method="POST">
+                                <input type="hidden" name="product_id" value="{{ .ProdutoID }}">
+                                <input type="hidden" name="filial_id" value="{{ .FilialID }}">
+                                <td class="py-2 px-4">{{ .ProdutoNome }}</td>
+                                <td class="py-2 px-4">{{ .FilialNome }}</td>
+                                <td class="py-2 px-4 text-right font-mono">{{ .Quantidade }}</td>
+                                <td class="py-2 px-4">
+                                    <input type="number" name="quantity" value="{{ .Quantidade }}" min="0" class="w-full text-right border rounded p-1">
+                                </td>
+                                <td class="py-2 px-4 text-center">
+                                    <button type="submit" class="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600">Guardar</button>
+                                </td>
+                            </form>
+                        </tr>
+                        {{ else }}
+                        <tr><td colspan="5" class="text-center py-4">Nenhum item de stock encontrado para os filtros selecionados.</td></tr>
+                        {{ end }}
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Paginação -->
+            <div class="flex justify-center items-center mt-6 space-x-2">
+                {{ if .Pagination.HasPrev }}
+                    <a href="/admin/stock?page={{.Pagination.PrevPage}}&filial_id={{.Pagination.FilterID}}&search_product={{.Pagination.SearchQuery}}" class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300">Anterior</a>
+                {{ else }}
+                    <span class="px-4 py-2 bg-gray-100 text-gray-400 rounded cursor-not-allowed">Anterior</span>
+                {{ end }}
+                <span class="px-4 py-2">Página {{ .Pagination.CurrentPage }} de {{ .Pagination.TotalPages }}</span>
+                {{ if .Pagination.HasNext }}
+                    <a href="/admin/stock?page={{.Pagination.NextPage}}&filial_id={{.Pagination.FilterID}}&search_product={{.Pagination.SearchQuery}}" class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300">Próxima</a>
+                {{ else }}
+                    <span class="px-4 py-2 bg-gray-100 text-gray-400 rounded cursor-not-allowed">Próxima</span>
+                {{ end }}
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal Adicionar Stock -->
+    <div id="addStockModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-20">
+        <div class="bg-white p-8 rounded-lg shadow-2xl w-full max-w-lg">
+            <h3 class="text-xl font-bold mb-4">Adicionar Novo Registo de Stock</h3>
+            <form action="/admin/stock/add" method="POST">
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">Tipo de Adição</label>
+                    <select name="add_type" onchange="toggleNewProductFields(this.value)" class="w-full px-3 py-2 border rounded bg-white">
+                        <option value="existing" selected>Adicionar a Produto Existente</option>
+                        <option value="new">Criar Novo Produto</option>
+                    </select>
+                </div>
+                <div id="existingProductFields">
+                    <div class="mb-4">
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Produto:</label>
+                        <select name="product_id" class="w-full px-3 py-2 border rounded bg-white">
+                            <option value="" disabled selected>Selecione um produto</option>
+                            {{ range .allProducts }}
+                            <option value="{{ .ID }}">{{ .Nome }}</option>
+                            {{ end }}
+                        </select>
+                    </div>
+                </div>
+                <div id="newProductFields" class="hidden">
+                    <div class="mb-4">
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Nome do Novo Produto:</label>
+                        <input type="text" name="new_product_name" class="w-full px-3 py-2 border rounded">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Código de Barras:</label>
+                        <input type="text" name="new_product_barcode" class="w-full px-3 py-2 border rounded">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Descrição:</label>
+                        <textarea name="new_product_description" rows="2" class="w-full px-3 py-2 border rounded"></textarea>
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Preço Sugerido:</label>
+                        <input type="number" step="0.01" name="new_product_price" class="w-full px-3 py-2 border rounded">
+                    </div>
+                </div>
+                <hr class="my-4">
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">Filial:</label>
+                    <select name="filial_id" required class="w-full px-3 py-2 border rounded bg-white">
+                        <option value="" disabled selected>Selecione uma filial</option>
+                        {{ range .filiais }}
+                        <option value="{{ .ID }}">{{ .Nome }}</option>
+                        {{ end }}
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">Quantidade a Adicionar:</label>
+                    <input type="number" name="quantity" min="1" required class="w-full px-3 py-2 border rounded">
+                </div>
+                <div class="flex justify-end space-x-4 mt-6">
+                    <button type="button" onclick="closeModal('addStockModal')" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded">Cancelar</button>
+                    <button type="submit" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">Adicionar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <script src="/static/js/admin.js"></script>
+</body>
+</html>

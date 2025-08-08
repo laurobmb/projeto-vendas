@@ -1,0 +1,9 @@
+comandos.md
+copy_code.sh
+go.mod
+.env
+go.sum
+setup_project.sh
+create_user.yml
+.ansible
+.vscode

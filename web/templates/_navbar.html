@@ -1,0 +1,35 @@
+{{ define "_navbar.html" }}
+<nav class="bg-gray-800 text-white p-4 shadow-md sticky top-0 z-10">
+    <div class="container mx-auto flex justify-between items-center">
+        <div class="flex items-center space-x-4">
+            <!-- Links para Admin -->
+            {{ if eq .UserRole "admin" }}
+                <a href="/admin/dashboard" class="text-lg font-semibold hover:text-gray-300 {{ if eq .ActivePage "dashboard" }}text-blue-300{{ end }}">Painel Admin</a>
+                <span class="text-gray-500">|</span>
+                <a href="/admin/stock" class="text-lg font-semibold hover:text-gray-300 {{ if eq .ActivePage "stock" }}text-blue-300{{ end }}">Gestão de Stock</a>
+                <span class="text-gray-500">|</span>
+                <a href="/admin/sales" class="text-lg font-semibold hover:text-gray-300 {{ if eq .ActivePage "sales" }}text-blue-300{{ end }}">Relatório de Vendas</a>
+                <span class="text-gray-500">|</span>
+            {{ end }}
+
+            <!-- Link para Estoquista -->
+            {{ if eq .UserRole "estoquista" }}
+                <a href="/estoque/dashboard" class="text-lg font-semibold hover:text-gray-300 {{ if eq .ActivePage "estoque" }}text-blue-300{{ end }}">Painel de Stock</a>
+                <span class="text-gray-500">|</span>
+            {{ end }}
+
+            <!-- Link para Vendedor (e Admin) -->
+            <a href="/vendas/terminal" class="text-lg font-semibold hover:text-gray-300 {{ if eq .ActivePage "vendas" }}text-blue-300{{ end }}">Terminal de Vendas</a>
+        </div>
+        
+        <div class="flex items-center space-x-4">
+            <span>Olá, <strong class="font-semibold">{{ .UserName }}</strong></span>
+            {{ if .FilialName }}
+                <span class="text-gray-400">|</span>
+                <span>Filial: <strong class="font-semibold">{{ .FilialName }}</strong></span>
+            {{ end }}
+            <a href="/logout" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-3 rounded text-sm">Sair</a>
+        </div>
+    </div>
+</nav>
+{{ end }}

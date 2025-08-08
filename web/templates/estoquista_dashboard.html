@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .title }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body class="bg-gray-50">
+    {{ template "_navbar.html" . }}
+    <main class="container mx-auto p-6">
+        {{ template "_messages.html" . }}
+        <div class="bg-white p-6 rounded-lg shadow-lg">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-4 border-b pb-2">
+                <div class="mb-2 md:mb-0">
+                    <h2 class="text-2xl font-semibold">Painel de Stock</h2>
+                    <p class="text-gray-600">A visualizar stock para a filial: <strong class="text-blue-600">{{ .FilialName }}</strong></p>
+                </div>
+                <button onclick="openModal('addStockModal')" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
+                    + Adicionar Stock
+                </button>
+            </div>
+            
+            <form action="/estoque/dashboard" method="GET" class="flex items-end space-x-4 mb-6">
+                <div class="flex-1 w-full">
+                    <label for="search_product" class="block text-sm font-medium text-gray-700">Procurar Produto</label>
+                    <input type="search" name="search_product" id="search_product" value="{{ .Pagination.SearchQuery }}" placeholder="Nome ou código de barras..." class="mt-1 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md">
+                </div>
+                <div>
+                    <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">Filtrar</button>
+                </div>
+            </form>
+
+            <div class="overflow-x-auto">
+                <table class="min-w-full bg-white">
+                    <thead class="bg-gray-200">
+                        <tr>
+                            <th class="py-2 px-4 text-left">Produto</th>
+                            <th class="py-2 px-4 text-left">Código de Barras</th>
+                            <th class="py-2 px-4 text-right">Stock Atual</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{ range .stockItems }}
+                        <tr class="border-b hover:bg-gray-50">
+                            <td class="py-2 px-4">{{ .ProdutoNome }}</td>
+                            <td class="py-2 px-4 font-mono">{{ .CodigoBarras }}</td>
+                            <td class="py-2 px-4 text-right font-mono text-lg font-semibold">{{ .Quantidade }}</td>
+                        </tr>
+                        {{ else }}
+                        <tr><td colspan="3" class="text-center py-4">Nenhum item de stock encontrado para a sua filial.</td></tr>
+                        {{ end }}
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="flex justify-center items-center mt-6 space-x-2">
+                {{ if .Pagination.HasPrev }}
+                    <a href="/estoque/dashboard?page={{.Pagination.PrevPage}}&search_product={{.Pagination.SearchQuery}}" class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300">Anterior</a>
+                {{ else }}
+                    <span class="px-4 py-2 bg-gray-100 text-gray-400 rounded cursor-not-allowed">Anterior</span>
+                {{ end }}
+                <span class="px-4 py-2">Página {{ .Pagination.CurrentPage }} de {{ .Pagination.TotalPages }}</span>
+                {{ if .Pagination.HasNext }}
+                    <a href="/estoque/dashboard?page={{.Pagination.NextPage}}&search_product={{.Pagination.SearchQuery}}" class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300">Próxima</a>
+                {{ else }}
+                    <span class="px-4 py-2 bg-gray-100 text-gray-400 rounded cursor-not-allowed">Próxima</span>
+                {{ end }}
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal Adicionar Stock -->
+    <div id="addStockModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-20">
+        <div class="bg-white p-8 rounded-lg shadow-2xl w-full max-w-lg">
+            <h3 class="text-xl font-bold mb-4">Adicionar Registo de Stock para {{ .FilialName }}</h3>
+            <form action="/estoque/add" method="POST">
+                <input type="hidden" name="filial_id" value="{{ .FilialID }}">
+                
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">Tipo de Adição</label>
+                    <select name="add_type" onchange="toggleNewProductFields(this.value)" class="w-full px-3 py-2 border rounded bg-white">
+                        <option value="existing" selected>Adicionar a Produto Existente</option>
+                        <option value="new">Criar Novo Produto</option>
+                    </select>
+                </div>
+                <div id="existingProductFields">
+                    <div class="mb-4">
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Produto:</label>
+                        <select name="product_id" class="w-full px-3 py-2 border rounded bg-white">
+                            <option value="" disabled selected>Selecione um produto</option>
+                            {{ range .allProducts }}
+                            <option value="{{ .ID }}">{{ .Nome }}</option>
+                            {{ end }}
+                        </select>
+                    </div>
+                </div>
+                <!-- CORREÇÃO: Adicionados os campos para um novo produto que estavam em falta. -->
+                <div id="newProductFields" class="hidden">
+                    <div class="mb-4">
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Nome do Novo Produto:</label>
+                        <input type="text" name="new_product_name" class="w-full px-3 py-2 border rounded">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Código de Barras:</label>
+                        <input type="text" name="new_product_barcode" class="w-full px-3 py-2 border rounded">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Descrição:</label>
+                        <textarea name="new_product_description" rows="2" class="w-full px-3 py-2 border rounded"></textarea>
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Preço Sugerido:</label>
+                        <input type="number" step="0.01" name="new_product_price" class="w-full px-3 py-2 border rounded">
+                    </div>
+                </div>
+                <hr class="my-4">
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">Quantidade a Adicionar:</label>
+                    <input type="number" name="quantity" min="1" required class="w-full px-3 py-2 border rounded">
+                </div>
+                <div class="flex justify-end space-x-4 mt-6">
+                    <button type="button" onclick="closeModal('addStockModal')" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded">Cancelar</button>
+                    <button type="submit" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">Adicionar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <script src="/static/js/admin.js"></script>
+</body>
+</html>

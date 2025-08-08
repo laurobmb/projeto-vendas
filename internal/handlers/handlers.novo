@@ -1,0 +1,489 @@
+package handlers
+
+import (
+	"errors"
+	"fmt"
+	"log"
+	"math"
+	"net/http"
+	"strconv"
+
+	"github.com/gin-contrib/sessions"
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
+	"golang.org/x/crypto/bcrypt"
+	"projeto-vendas/internal/models"
+	"projeto-vendas/internal/storage"
+)
+
+const PageLimit = 10
+type Handler struct {
+	Storage *storage.Storage
+}
+func NewHandler(s *storage.Storage) *Handler {
+	return &Handler{Storage: s}
+}
+
+// getFlashes lê e apaga as mensagens flash da sessão.
+func getFlashes(c *gin.Context) gin.H {
+	session := sessions.Default(c)
+	successFlashes := session.Flashes("success")
+	errorFlashes := session.Flashes("error")
+	session.Save() // Salva a sessão para limpar as flashes
+
+	data := gin.H{}
+	if len(successFlashes) > 0 {
+		data["success"] = successFlashes[0]
+	}
+	if len(errorFlashes) > 0 {
+		data["error"] = errorFlashes[0]
+	}
+	return data
+}
+
+func (h *Handler) ShowLoginPage(c *gin.Context) {
+	c.HTML(http.StatusOK, "login.html", gin.H{"title": "Login"})
+}
+
+func (h *Handler) HandleLogin(c *gin.Context) {
+	email := c.PostForm("email")
+	password := c.PostForm("password")
+	user, err := h.Storage.GetUserByEmail(email)
+	if err != nil {
+		c.HTML(http.StatusBadRequest, "login.html", gin.H{"error": "Email ou senha inválidos."})
+		return
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(user.SenhaHash), []byte(password)); err != nil {
+		c.HTML(http.StatusBadRequest, "login.html", gin.H{"error": "Email ou senha inválidos."})
+		return
+	}
+	
+	session := sessions.Default(c)
+	session.Set("userID", user.ID.String())
+	session.Set("userName", user.Nome)
+	session.Set("userRole", user.Cargo)
+
+	if user.FilialID != nil {
+		filial, err := h.Storage.GetFilialByID(user.FilialID.String())
+		if err == nil {
+			session.Set("filialID", filial.ID.String())
+			session.Set("filialName", filial.Nome)
+		} else {
+			log.Printf("Aviso: Utilizador %s tem filial_id %s mas a filial não foi encontrada.", user.Email, user.FilialID)
+		}
+	}
+
+	session.Save()
+	c.Redirect(http.StatusFound, "/")
+}
+
+func (h *Handler) HandleLogout(c *gin.Context) {
+	session := sessions.Default(c)
+	session.Clear()
+	session.Save()
+	c.Redirect(http.StatusFound, "/login")
+}
+
+func (h *Handler) ShowAdminDashboard(c *gin.Context) {
+	session := sessions.Default(c)
+	pageUsers, _ := strconv.Atoi(c.DefaultQuery("page_users", "1"))
+	pageProducts, _ := strconv.Atoi(c.DefaultQuery("page_products", "1"))
+	searchQuery := c.Query("search_products")
+	if pageUsers < 1 { pageUsers = 1 }
+	if pageProducts < 1 { pageProducts = 1 }
+
+	totalUsers, _ := h.Storage.CountUsers()
+	users, _ := h.Storage.GetUsersPaginated(PageLimit, (pageUsers-1)*PageLimit)
+	totalPagesUsers := int(math.Ceil(float64(totalUsers) / float64(PageLimit)))
+
+	totalProducts, _ := h.Storage.CountProducts(searchQuery)
+	products, _ := h.Storage.GetProductsPaginatedAndFiltered(searchQuery, PageLimit, (pageProducts-1)*PageLimit)
+	totalPagesProducts := int(math.Ceil(float64(totalProducts) / float64(PageLimit)))
+
+	filiais, _ := h.Storage.GetAllFiliais()
+
+	data := getFlashes(c)
+	data["title"] = "Painel do Administrador"
+	data["users"] = users
+	data["products"] = products
+	data["filiais"] = filiais
+	data["UserRole"] = session.Get("userRole")
+	data["UserName"] = session.Get("userName")
+	data["ActivePage"] = "dashboard"
+	data["PaginationUsers"] = models.PaginationData{
+		HasPrev:     pageUsers > 1,
+		HasNext:     pageUsers < totalPagesUsers,
+		PrevPage:    pageUsers - 1,
+		NextPage:    pageUsers + 1,
+		CurrentPage: pageUsers,
+		TotalPages:  totalPagesUsers,
+	}
+	data["PaginationProducts"] = models.PaginationData{
+		HasPrev:     pageProducts > 1,
+		HasNext:     pageProducts < totalPagesProducts,
+		PrevPage:    pageProducts - 1,
+		NextPage:    pageProducts + 1,
+		CurrentPage: pageProducts,
+		TotalPages:  totalPagesProducts,
+		SearchQuery: searchQuery,
+	}
+	c.HTML(http.StatusOK, "admin_dashboard.html", data)
+}
+
+func (h *Handler) ShowStockManagementPage(c *gin.Context) {
+	session := sessions.Default(c)
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	searchQuery := c.Query("search_product")
+	filialID := c.Query("filial_id")
+	if page < 1 { page = 1 }
+
+	totalItems, _ := h.Storage.CountStockItems(filialID, searchQuery)
+	stockItems, _ := h.Storage.GetStockItemsPaginated(filialID, searchQuery, PageLimit, (page-1)*PageLimit)
+	totalPages := int(math.Ceil(float64(totalItems) / float64(PageLimit)))
+	
+	filiais, _ := h.Storage.GetAllFiliais()
+	allProducts, _ := h.Storage.GetAllProductsSimple()
+
+	data := getFlashes(c)
+	data["title"] = "Gestão de Stock por Filial"
+	data["stockItems"] = stockItems
+	data["filiais"] = filiais
+	data["allProducts"] = allProducts
+	data["UserRole"] = session.Get("userRole")
+	data["UserName"] = session.Get("userName")
+	data["ActivePage"] = "stock"
+	data["Pagination"] = models.PaginationData{
+		HasPrev:     page > 1,
+		HasNext:     page < totalPages,
+		PrevPage:    page - 1,
+		NextPage:    page + 1,
+		CurrentPage: page,
+		TotalPages:  totalPages,
+		SearchQuery: searchQuery,
+		FilterID:    filialID,
+	}
+	c.HTML(http.StatusOK, "stock_management.html", data)
+}
+
+func (h *Handler) ShowSalesTerminalPage(c *gin.Context) {
+	session := sessions.Default(c)
+	userRole := session.Get("userRole")
+	
+	data := gin.H{
+		"title":      "Terminal de Vendas",
+		"UserRole":   userRole,
+		"UserName":   session.Get("userName"),
+		"FilialName": session.Get("filialName"),
+		"FilialID":   session.Get("filialID"),
+		"ActivePage": "vendas",
+	}
+
+	if userRole == "admin" {
+		filiais, err := h.Storage.GetAllFiliais()
+		if err != nil {
+			log.Printf("Erro ao buscar filiais para o terminal de vendas do admin: %v", err)
+		}
+		data["filiais"] = filiais
+	}
+
+	c.HTML(http.StatusOK, "terminal_vendas.html", data)
+}
+
+func (h *Handler) ShowSalesReportPage(c *gin.Context) {
+	session := sessions.Default(c)
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	filialID := c.Query("filial_id")
+	if page < 1 { page = 1 }
+
+	totalItems, _ := h.Storage.CountSales(filialID)
+	sales, _ := h.Storage.GetSalesPaginated(filialID, PageLimit, (page-1)*PageLimit)
+	totalPages := int(math.Ceil(float64(totalItems) / float64(PageLimit)))
+	
+	filiais, _ := h.Storage.GetAllFiliais()
+
+	data := getFlashes(c)
+	data["title"] = "Relatório de Vendas"
+	data["sales"] = sales
+	data["filiais"] = filiais
+	data["UserRole"] = session.Get("userRole")
+	data["UserName"] = session.Get("userName")
+	data["ActivePage"] = "sales"
+	data["Pagination"] = models.PaginationData{
+		HasPrev: page > 1, HasNext: page < totalPages,
+		PrevPage: page - 1, NextPage: page + 1,
+		CurrentPage: page, TotalPages: totalPages,
+		FilterID:    filialID,
+	}
+	c.HTML(http.StatusOK, "sales_report.html", data)
+}
+
+func (h *Handler) ShowEstoquistaDashboard(c *gin.Context) {
+	session := sessions.Default(c)
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	searchQuery := c.Query("search_product")
+	
+	filialID, ok := session.Get("filialID").(string)
+	if !ok {
+		c.HTML(http.StatusForbidden, "error.html", gin.H{"title": "Erro", "ErrorMessage": "Utilizador não está associado a nenhuma filial."})
+		return
+	}
+
+	if page < 1 { page = 1 }
+
+	totalItems, _ := h.Storage.CountStockItems(filialID, searchQuery)
+	stockItems, _ := h.Storage.GetStockItemsPaginated(filialID, searchQuery, PageLimit, (page-1)*PageLimit)
+	totalPages := int(math.Ceil(float64(totalItems) / float64(PageLimit)))
+	
+	allProducts, _ := h.Storage.GetAllProductsSimple()
+	
+	data := getFlashes(c)
+	data["title"] = "Painel de Stock"
+	data["stockItems"] = stockItems
+	data["allProducts"] = allProducts
+	data["UserRole"] = session.Get("userRole")
+	data["UserName"] = session.Get("userName")
+	data["FilialName"] = session.Get("filialName")
+	data["FilialID"] = filialID
+	data["ActivePage"] = "estoque"
+	data["Pagination"] = models.PaginationData{
+		HasPrev: page > 1, HasNext: page < totalPages,
+		PrevPage: page - 1, NextPage: page + 1,
+		CurrentPage: page, TotalPages: totalPages,
+		SearchQuery: searchQuery,
+	}
+
+	c.HTML(http.StatusOK, "estoquista_dashboard.html", data)
+}
+
+func (h *Handler) HandleAddUser(c *gin.Context) {
+	user := models.User{
+		Nome:  c.PostForm("name"),
+		Email: c.PostForm("email"),
+		Cargo: c.PostForm("role"),
+	}
+	password := c.PostForm("password")
+	filialIDStr := c.PostForm("filial_id")
+
+	if filialIDStr != "" {
+		parsedUUID, err := uuid.Parse(filialIDStr)
+		if err == nil {
+			user.FilialID = &parsedUUID
+		}
+	}
+
+	err := h.Storage.AddUser(user, password)
+	if err != nil {
+		log.Printf("Erro ao adicionar utilizador: %v", err)
+	}
+	c.Redirect(http.StatusFound, "/admin/dashboard")
+}
+
+func (h *Handler) HandleAddProduct(c *gin.Context) {
+	price, _ := strconv.ParseFloat(c.PostForm("price"), 64)
+	product := models.Product{
+		Nome:          c.PostForm("name"),
+		Descricao:     c.PostForm("description"),
+		CodigoBarras:  c.PostForm("barcode"),
+		PrecoSugerido: price,
+	}
+	err := h.Storage.AddProduct(product)
+	if err != nil {
+		log.Printf("Erro ao adicionar produto: %v", err)
+	}
+	c.Redirect(http.StatusFound, "/admin/dashboard")
+}
+
+func (h *Handler) HandleDeleteUser(c *gin.Context) {
+	err := h.Storage.DeleteUserByID(c.Param("id"))
+	if err != nil { log.Printf("Erro ao apagar utilizador: %v", err) }
+	c.Redirect(http.StatusFound, c.Request.Header.Get("Referer"))
+}
+
+func (h *Handler) HandleDeleteProduct(c *gin.Context) {
+	err := h.Storage.DeleteProductByID(c.Param("id"))
+	if err != nil { log.Printf("Erro ao apagar produto: %v", err) }
+	c.Redirect(http.StatusFound, c.Request.Header.Get("Referer"))
+}
+
+func (h *Handler) HandleUpdateStock(c *gin.Context) {
+	productID := c.PostForm("product_id")
+	filialID := c.PostForm("filial_id")
+	newQuantity, err := strconv.Atoi(c.PostForm("quantity"))
+	if err != nil || newQuantity < 0 {
+		log.Println("Erro: Quantidade inválida.")
+		c.Redirect(http.StatusFound, c.Request.Header.Get("Referer"))
+		return
+	}
+	err = h.Storage.UpdateStockQuantity(productID, filialID, newQuantity)
+	if err != nil {
+		log.Printf("Erro ao atualizar stock: %v", err)
+	}
+	c.Redirect(http.StatusFound, c.Request.Header.Get("Referer"))
+}
+
+func (h *Handler) HandleAddStockItem(c *gin.Context) {
+	session := sessions.Default(c)
+	addType := c.PostForm("add_type")
+	filialID := c.PostForm("filial_id")
+	quantity, err := strconv.Atoi(c.PostForm("quantity"))
+
+	if err != nil || quantity < 0 {
+		session.AddFlash("Quantidade inválida.", "error")
+		session.Save()
+		c.Redirect(http.StatusFound, c.Request.Header.Get("Referer"))
+		return
+	}
+
+	if addType == "new" {
+		price, _ := strconv.ParseFloat(c.PostForm("new_product_price"), 64)
+		newProduct := models.Product{
+			Nome:          c.PostForm("new_product_name"),
+			Descricao:     c.PostForm("new_product_description"),
+			CodigoBarras:  c.PostForm("new_product_barcode"),
+			PrecoSugerido: price,
+		}
+		err = h.Storage.CreateProductWithInitialStock(newProduct, filialID, quantity)
+	} else {
+		productID := c.PostForm("product_id")
+		err = h.Storage.AddStockItem(productID, filialID, quantity)
+	}
+
+	if err != nil {
+		log.Printf("Erro ao processar adição de stock: %v", err)
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			session.AddFlash(fmt.Sprintf("Erro: O produto com este nome ou código de barras já existe. Use a opção 'Adicionar a Produto Existente'."), "error")
+		} else {
+			session.AddFlash(fmt.Sprintf("Falha ao adicionar stock: %v", err), "error")
+		}
+	} else {
+		session.AddFlash("Stock adicionado com sucesso!", "success")
+	}
+	session.Save()
+	c.Redirect(http.StatusFound, c.Request.Header.Get("Referer"))
+}
+
+func (h *Handler) HandleGetProductStock(c *gin.Context) {
+	productID := c.Param("id")
+	stockDetails, err := h.Storage.GetProductStockByFilial(productID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Falha ao obter stock do produto"})
+		return
+	}
+	c.JSON(http.StatusOK, stockDetails)
+}
+
+func (h *Handler) HandleAdjustStock(c *gin.Context) {
+	var req struct {
+		ProductID string `json:"product_id"`
+		FilialID  string `json:"filial_id"`
+		Quantity  int    `json:"quantity"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Requisição inválida"})
+		return
+	}
+	if req.Quantity <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "A quantidade deve ser positiva."})
+		return
+	}
+	err := h.Storage.AdjustStockQuantity(req.ProductID, req.FilialID, req.Quantity)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+func (h *Handler) HandleSearchProductsForSale(c *gin.Context) {
+	query := c.Query("q")
+	filialIDStr := c.Query("filial_id")
+	if filialIDStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID da filial é obrigatório."})
+		return
+	}
+	filialID, err := uuid.Parse(filialIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID da filial inválido."})
+		return
+	}
+
+	products, err := h.Storage.SearchProductsForSale(query, filialID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao buscar produtos."})
+		return
+	}
+	c.JSON(http.StatusOK, products)
+}
+
+func (h *Handler) HandleRegisterSale(c *gin.Context) {
+	session := sessions.Default(c)
+	userID, _ := uuid.Parse(session.Get("userID").(string))
+	
+	var req struct {
+		FilialID string               `json:"filial_id"`
+		Items    []models.ItemVenda `json:"items"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Dados da venda inválidos."})
+		return
+	}
+	
+	filialID, err := uuid.Parse(req.FilialID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID da filial na venda é inválido."})
+		return
+	}
+
+	var total float64
+	for i := range req.Items {
+		req.Items[i].ProdutoID, _ = uuid.Parse(req.Items[i].ProdutoIDStr)
+		total += req.Items[i].PrecoUnitario * float64(req.Items[i].Quantidade)
+	}
+
+	venda := models.Venda{
+		UsuarioID:  userID,
+		FilialID:   filialID,
+		TotalVenda: total,
+	}
+
+	if err := h.Storage.RegisterSale(venda, req.Items); err != nil {
+		log.Printf("Erro ao registar venda: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+func (h *Handler) HandleEditUser(c *gin.Context) {
+    session := sessions.Default(c)
+    userID := c.Param("id")
+
+    user := models.User{
+        Nome:  c.PostForm("name"),
+        Email: c.PostForm("email"),
+        Cargo: c.PostForm("role"),
+    }
+    newPassword := c.PostForm("password")
+    filialIDStr := c.PostForm("filial_id")
+
+    if filialIDStr != "" {
+        parsedUUID, err := uuid.Parse(filialIDStr)
+        if err == nil {
+            user.FilialID = &parsedUUID
+        }
+    }
+
+    err := h.Storage.UpdateUser(userID, user, newPassword)
+    if err != nil {
+        log.Printf("Erro ao atualizar utilizador: %v", err)
+        session.AddFlash(fmt.Sprintf("Falha ao atualizar utilizador: %v", err), "error")
+    } else {
+        session.AddFlash("Utilizador atualizado com sucesso!", "success")
+    }
+    session.Save()
+    c.Redirect(http.StatusFound, "/admin/dashboard")
+}

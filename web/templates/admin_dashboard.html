@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .title }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body class="bg-gray-50">
+    {{ template "_navbar.html" . }}
+
+    <main class="container mx-auto p-6">
+        {{ template "_messages.html" . }}
+        <!-- Seção de Utilizadores -->
+        <div class="bg-white p-6 rounded-lg shadow-lg mb-8">
+            <div class="flex justify-between items-center mb-4 border-b pb-2">
+                <h2 class="text-2xl font-semibold">Gerir Utilizadores</h2>
+                <button onclick="openModal('addUserModal')" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
+                    + Adicionar Utilizador
+                </button>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full bg-white">
+                    <thead class="bg-gray-200">
+                        <tr>
+                            <th class="py-2 px-4 text-left">Nome</th>
+                            <th class="py-2 px-4 text-left">Email</th>
+                            <th class="py-2 px-4 text-left">Cargo</th>
+                            <th class="py-2 px-4 text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{ range .users }}
+                        <tr class="border-b hover:bg-gray-50">
+                            <td class="py-2 px-4">{{ .Nome }}</td>
+                            <td class="py-2 px-4">{{ .Email }}</td>
+                            <td class="py-2 px-4 capitalize">{{ .Cargo }}</td>
+                            <td class="py-2 px-4 text-center">
+                                <div class="flex justify-center items-center space-x-2">
+                                    <!-- CORREÇÃO: A lógica para obter o FilialID foi corrigida para evitar erros quando for nulo. -->
+                                    <button onclick="openEditUserModal('{{.ID}}', '{{.Nome}}', '{{.Email}}', '{{.Cargo}}', '{{if .FilialID}}{{.FilialID.String}}{{end}}')" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded text-sm">
+                                        Editar
+                                    </button>
+                                    <form action="/admin/users/delete/{{ .ID }}" method="POST" onsubmit="return confirm('Tem a certeza que deseja apagar este utilizador?');">
+                                        <button type="submit" class="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-3 rounded text-sm">
+                                            Remover
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {{ else }}
+                        <tr><td colspan="4" class="text-center py-4">Nenhum utilizador encontrado.</td></tr>
+                        {{ end }}
+                    </tbody>
+                </table>
+            </div>
+            {{ template "pagination" dict "P" .PaginationUsers "Type" "users" "OtherP" .PaginationProducts "OtherType" "products" }}
+        </div>
+
+        <!-- Seção de Produtos -->
+        <div class="bg-white p-6 rounded-lg shadow-lg">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-4 border-b pb-2">
+                <h2 class="text-2xl font-semibold mb-2 md:mb-0">Gerir Catálogo de Produtos</h2>
+                <div class="flex items-center space-x-4">
+                    <form action="/admin/dashboard" method="GET" class="flex-grow">
+                        <div class="flex items-center">
+                            <input type="search" name="search_products" value="{{ .PaginationProducts.SearchQuery }}" placeholder="Procurar por nome ou código..." class="shadow appearance-none border rounded-l w-full py-2 px-3 text-gray-700 focus:outline-none focus:shadow-outline">
+                            <input type="hidden" name="page_users" value="{{ .PaginationUsers.CurrentPage }}">
+                            <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-r">Procurar</button>
+                        </div>
+                    </form>
+                    <button onclick="openModal('addProductModal')" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
+                        + Adicionar Produto
+                    </button>
+                </div>
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table class="min-w-full bg-white">
+                     <thead class="bg-gray-200">
+                        <tr>
+                            <th class="py-2 px-4 text-left">Nome</th>
+                            <th class="py-2 px-4 text-left">Código de Barras</th>
+                            <th class="py-2 px-4 text-right">Stock Total</th>
+                            <th class="py-2 px-4 text-right">Valor Total em Stock</th>
+                            <th class="py-2 px-4 text-right">Preço Sugerido</th>
+                            <th class="py-2 px-4 text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{ range .products }}
+                        <tr class="border-b hover:bg-gray-50">
+                            <td class="py-2 px-4">{{ .Nome }}</td>
+                            <td class="py-2 px-4 font-mono">{{ .CodigoBarras }}</td>
+                            <td class="py-2 px-4 text-right font-mono">{{ .TotalEstoque }}</td>
+                            <td class="py-2 px-4 text-right font-mono text-green-700 font-semibold">R$ {{ printf "%.2f" .ValorTotalEstoque }}</td>
+                            <td class="py-2 px-4 text-right">R$ {{ printf "%.2f" .PrecoSugerido }}</td>
+                            <td class="py-2 px-4 text-center">
+                                <div class="flex justify-center items-center space-x-2">
+                                    <button onclick="openAdjustStockModal('{{.ID}}', '{{.Nome}}')" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded text-sm">
+                                        Ajustar
+                                    </button>
+                                    <form action="/admin/products/delete/{{ .ID }}" method="POST" onsubmit="return confirm('Tem a certeza que deseja APAGAR este produto do catálogo? Esta ação não pode ser desfeita.');">
+                                        <button type="submit" class="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-3 rounded text-sm">
+                                            Remover
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {{ else }}
+                        <tr ><td colspan="6" class="text-center py-4">Nenhum produto encontrado.</td></tr>
+                        {{ end }}
+                    </tbody>
+                </table>
+            </div>
+            {{ template "pagination" dict "P" .PaginationProducts "Type" "products" "OtherP" .PaginationUsers "OtherType" "users" }}
+        </div>
+    </main>
+
+    <!-- Modal Adicionar Utilizador -->
+    <div id="addUserModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-20">
+        <div class="bg-white p-8 rounded-lg shadow-2xl w-full max-w-md">
+            <h3 class="text-xl font-bold mb-4">Adicionar Novo Utilizador</h3>
+            <form action="/admin/users/add" method="POST">
+                <div class="mb-4">
+                    <label for="name" class="block text-gray-700 text-sm font-bold mb-2">Nome:</label>
+                    <input type="text" name="name" required class="w-full px-3 py-2 border rounded">
+                </div>
+                <div class="mb-4">
+                    <label for="email" class="block text-gray-700 text-sm font-bold mb-2">Email:</label>
+                    <input type="email" name="email" required class="w-full px-3 py-2 border rounded">
+                </div>
+                <div class="mb-4">
+                    <label for="password" class="block text-gray-700 text-sm font-bold mb-2">Senha:</label>
+                    <input type="password" name="password" required class="w-full px-3 py-2 border rounded">
+                </div>
+                <div class="mb-4">
+                    <label for="role" class="block text-gray-700 text-sm font-bold mb-2">Cargo:</label>
+                    <select name="role" required class="w-full px-3 py-2 border rounded bg-white">
+                        <option value="admin">Admin</option>
+                        <option value="estoquista">Estoquista</option>
+                        <option value="vendedor">Vendedor</option>
+                    </select>
+                </div>
+                 <div class="mb-4">
+                    <label for="filial_id" class="block text-gray-700 text-sm font-bold mb-2">Filial (Opcional):</label>
+                    <select name="filial_id" class="w-full px-3 py-2 border rounded bg-white">
+                        <option value="">Nenhuma</option>
+                        {{ range .filiais }}
+                        <option value="{{ .ID }}">{{ .Nome }}</option>
+                        {{ end }}
+                    </select>
+                </div>
+                <div class="flex justify-end space-x-4">
+                    <button type="button" onclick="closeModal('addUserModal')" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded">Cancelar</button>
+                    <button type="submit" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Editar Utilizador -->
+    <div id="editUserModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-20">
+        <div class="bg-white p-8 rounded-lg shadow-2xl w-full max-w-md">
+            <h3 class="text-xl font-bold mb-4">Editar Utilizador</h3>
+            <form action="" method="POST"> <!-- A ação será definida pelo JavaScript -->
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">Nome:</label>
+                    <input type="text" name="name" required class="w-full px-3 py-2 border rounded">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">Email:</label>
+                    <input type="email" name="email" required class="w-full px-3 py-2 border rounded">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">Nova Senha (deixe em branco para não alterar):</label>
+                    <input type="password" name="password" class="w-full px-3 py-2 border rounded">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">Cargo:</label>
+                    <select name="role" required class="w-full px-3 py-2 border rounded bg-white">
+                        <option value="admin">Admin</option>
+                        <option value="estoquista">Estoquista</option>
+                        <option value="vendedor">Vendedor</option>
+                    </select>
+                </div>
+                 <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">Filial (Opcional):</label>
+                    <select name="filial_id" class="w-full px-3 py-2 border rounded bg-white">
+                        <option value="">Nenhuma</option>
+                        {{ range .filiais }}
+                        <option value="{{ .ID }}">{{ .Nome }}</option>
+                        {{ end }}
+                    </select>
+                </div>
+                <div class="flex justify-end space-x-4">
+                    <button type="button" onclick="closeModal('editUserModal')" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded">Cancelar</button>
+                    <button type="submit" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">Guardar Alterações</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div id="addProductModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-20">
+        <div class="bg-white p-8 rounded-lg shadow-2xl w-full max-w-md">
+            <h3 class="text-xl font-bold mb-4">Adicionar Novo Produto ao Catálogo</h3>
+            <form action="/admin/products/add" method="POST">
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">Nome do Produto:</label>
+                    <input type="text" name="name" required class="w-full px-3 py-2 border rounded">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">Código de Barras:</label>
+                    <input type="text" name="barcode" class="w-full px-3 py-2 border rounded">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">Descrição:</label>
+                    <textarea name="description" rows="3" class="w-full px-3 py-2 border rounded"></textarea>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">Preço Sugerido:</label>
+                    <input type="number" step="0.01" name="price" required class="w-full px-3 py-2 border rounded">
+                </div>
+                <div class="flex justify-end space-x-4">
+                    <button type="button" onclick="closeModal('addProductModal')" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded">Cancelar</button>
+                    <button type="submit" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <div id="adjustStockModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-20">
+        <div class="bg-white p-8 rounded-lg shadow-2xl w-full max-w-lg">
+            <h3 class="text-xl font-bold mb-1">Ajustar Stock</h3>
+            <p id="adjustStockProductName" class="text-gray-600 mb-4"></p>
+            <div id="adjustStockContent" class="max-h-96 overflow-y-auto"></div>
+            <div class="flex justify-end mt-6">
+                <button type="button" onclick="closeModal('adjustStockModal')" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded">Fechar</button>
+            </div>
+        </div>
+    </div>
+    <script src="/static/js/admin.js"></script>
+</body>
+{{ define "pagination" }}
+<div class="flex justify-center items-center mt-6 space-x-2">
+    {{ if .P.HasPrev }}
+        <a href="/admin/dashboard?page_{{.Type}}={{.P.PrevPage}}&page_{{.OtherType}}={{.OtherP.CurrentPage}}&search_products={{.P.SearchQuery}}" class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300">Anterior</a>
+    {{ else }}
+        <span class="px-4 py-2 bg-gray-100 text-gray-400 rounded cursor-not-allowed">Anterior</span>
+    {{ end }}
+    <span class="px-4 py-2">Página {{ .P.CurrentPage }} de {{ .P.TotalPages }}</span>
+    {{ if .P.HasNext }}
+        <a href="/admin/dashboard?page_{{.Type}}={{.P.NextPage}}&page_{{.OtherType}}={{.OtherP.CurrentPage}}&search_products={{.P.SearchQuery}}" class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300">Próxima</a>
+    {{ else }}
+        <span class="px-4 py-2 bg-gray-100 text-gray-400 rounded cursor-not-allowed">Próxima</span>
+    {{ end }}
+</div>
+{{ end }}
+</html>

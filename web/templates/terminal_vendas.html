@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terminal de Vendas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body class="bg-gray-100 flex flex-col h-screen">
+    {{ template "_navbar.html" . }}
+
+    <main class="flex-1 flex p-4 container mx-auto space-x-4">
+        <!-- Lado Esquerdo: Itens da Venda -->
+        <div class="w-2/3 bg-white rounded-lg shadow-lg p-4 flex flex-col">
+            <h2 class="text-2xl font-semibold mb-3 border-b pb-2">Itens da Venda</h2>
+            <div class="flex-1 overflow-y-auto">
+                <table class="min-w-full">
+                    <thead class="bg-gray-200 sticky top-0">
+                        <tr>
+                            <th class="py-2 px-3 text-left">Produto</th>
+                            <th class="py-2 px-3 text-center w-24">Qtd</th>
+                            <th class="py-2 px-3 text-right w-32">Preço Unit.</th>
+                            <th class="py-2 px-3 text-right w-32">Subtotal</th>
+                            <th class="py-2 px-3 text-center w-16">Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cart-items">
+                        <tr id="empty-cart-row">
+                            <td colspan="5" class="text-center py-10 text-gray-500">Nenhum item adicionado.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Lado Direito: Controlo e Total -->
+        <div class="w-1/3 flex flex-col space-y-4">
+            <div class="bg-blue-900 text-white rounded-lg shadow-lg p-6 text-center">
+                <h3 class="text-lg font-medium text-blue-200">TOTAL A PAGAR</h3>
+                <p id="total-display" class="text-6xl font-bold tracking-tight">R$ 0,00</p>
+            </div>
+
+            <div class="bg-white rounded-lg shadow-lg p-4 flex-1">
+                <!-- Seletor de filial para administradores -->
+                {{ if eq .UserRole "admin" }}
+                <div class="mb-4">
+                    <label for="filial-selector" class="block text-sm font-medium text-gray-700">A operar na Filial:</label>
+                    <select id="filial-selector" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md bg-white">
+                        <option value="">-- Selecione uma filial --</option>
+                        {{ range .filiais }}
+                        <option value="{{ .ID }}">{{ .Nome }}</option>
+                        {{ end }}
+                    </select>
+                </div>
+                {{ else }}
+                <!-- Para vendedores, o ID da filial é obtido da sessão, mas precisamos de um input escondido para o JS -->
+                <input type="hidden" id="filial-selector" value="{{ .FilialID }}">
+                {{ end }}
+
+                <h3 class="text-xl font-semibold mb-3">Adicionar Produto</h3>
+                <div class="relative">
+                    <input type="text" id="product-search" placeholder="Digite o nome ou código de barras..." class="w-full py-3 px-4 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg" autocomplete="off" disabled>
+                    <div id="search-results" class="absolute top-full left-0 w-full bg-white border mt-1 rounded-lg shadow-lg z-20 hidden max-h-60 overflow-y-auto"></div>
+                </div>
+                <div class="mt-6">
+                    <button onclick="finalizeSale()" id="finalize-sale-btn" class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-4 rounded-lg text-2xl shadow-lg transition duration-200 disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>
+                        Finalizar Venda
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="/static/js/vendas.js"></script>
+</body>
+</html>

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .title }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body class="bg-gray-50">
+    {{ template "_navbar.html" . }}
+
+    <main class="container mx-auto p-6">
+        <div class="bg-white p-6 rounded-lg shadow-lg">
+            <h2 class="text-2xl font-semibold mb-4 border-b pb-2">Relatório de Vendas</h2>
+            <form action="/admin/sales" method="GET" class="flex items-end space-x-4 mb-6">
+                <div class="flex-1">
+                    <label for="filial_id" class="block text-sm font-medium text-gray-700">Filtrar por Filial</label>
+                    <select name="filial_id" id="filial_id" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md bg-white">
+                        <option value="">Todas as Filiais</option>
+                        {{ range .filiais }}
+                        <option value="{{ .ID }}" {{ if eq .ID.String $.Pagination.FilterID }}selected{{ end }}>{{ .Nome }}</option>
+                        {{ end }}
+                    </select>
+                </div>
+                <div>
+                    <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">Filtrar</button>
+                </div>
+            </form>
+
+            <div class="overflow-x-auto">
+                <table class="min-w-full bg-white">
+                    <thead class="bg-gray-200">
+                        <tr>
+                            <th class="py-2 px-4 text-left">Data e Hora</th>
+                            <th class="py-2 px-4 text-left">Filial</th>
+                            <th class="py-2 px-4 text-left">Vendedor</th>
+                            <th class="py-2 px-4 text-right">Total da Venda</th>
+                            <th class="py-2 px-4 text-left">ID da Venda</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{ range .sales }}
+                        <tr class="border-b hover:bg-gray-50">
+                            <td class="py-2 px-4">{{ .DataVenda.Format "02/01/2006 15:04" }}</td>
+                            <td class="py-2 px-4">{{ .FilialNome }}</td>
+                            <td class="py-2 px-4">{{ .VendedorNome }}</td>
+                            <td class="py-2 px-4 text-right font-semibold text-green-700">R$ {{ printf "%.2f" .TotalVenda }}</td>
+                            <td class="py-2 px-4 font-mono text-xs text-gray-500">{{ .VendaID }}</td>
+                        </tr>
+                        {{ else }}
+                        <tr><td colspan="5" class="text-center py-4">Nenhuma venda encontrada para os filtros selecionados.</td></tr>
+                        {{ end }}
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Paginação -->
+            <div class="flex justify-center items-center mt-6 space-x-2">
+                {{ if .Pagination.HasPrev }}
+                    <a href="/admin/sales?page={{.Pagination.PrevPage}}&filial_id={{.Pagination.FilterID}}" class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300">Anterior</a>
+                {{ else }}
+                    <span class="px-4 py-2 bg-gray-100 text-gray-400 rounded cursor-not-allowed">Anterior</span>
+                {{ end }}
+                <span class="px-4 py-2">Página {{ .Pagination.CurrentPage }} de {{ .Pagination.TotalPages }}</span>
+                {{ if .Pagination.HasNext }}
+                    <a href="/admin/sales?page={{.Pagination.NextPage}}&filial_id={{.Pagination.FilterID}}" class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300">Próxima</a>
+                {{ else }}
+                    <span class="px-4 py-2 bg-gray-100 text-gray-400 rounded cursor-not-allowed">Próxima</span>
+                {{ end }}
+            </div>
+        </div>
+    </main>
+</body>
+</html>
