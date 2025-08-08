@@ -161,7 +161,8 @@ class VendasSystemTest(unittest.TestCase):
     # NOVO: Função auxiliar para tirar screenshots
     def _take_screenshot(self, name):
         """Tira um screenshot e guarda com um nome descritivo."""
-        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        # timestamp = time.strftime("%Y%m%d-%H%M%S")
+        timestamp = time.strftime("%Y%m%d")
         screenshot_path = os.path.join(self.photos_dir, f"{timestamp}_{name}.png")
         try:
             self.browser.save_screenshot(screenshot_path)
