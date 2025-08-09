@@ -20,24 +20,29 @@ import (
 
 const PageLimit = 10
 type Handler struct {
-	Storage storage.Store // ATUALIZADO: Depende da interface, não da struct.
+	Storage storage.Store
 }
-// CORREÇÃO: A função agora aceita a interface 'Store', tornando-a testável.
 func NewHandler(s storage.Store) *Handler {
 	return &Handler{Storage: s}
 }
 
-// NOVO: Handler da API para o resumo de vendas.
-func (h *Handler) HandleGetSalesSummary(c *gin.Context) {
-	summary, err := h.Storage.GetSalesSummary()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Falha ao obter o resumo de vendas."})
-		return
+// getFlashes lê e apaga as mensagens flash da sessão.
+func getFlashes(c *gin.Context) gin.H {
+	session := sessions.Default(c)
+	successFlashes := session.Flashes("success")
+	errorFlashes := session.Flashes("error")
+	session.Save() // Salva a sessão para limpar as flashes
+
+	data := gin.H{}
+	if len(successFlashes) > 0 {
+		data["success"] = successFlashes[0]
 	}
-	c.JSON(http.StatusOK, summary)
+	if len(errorFlashes) > 0 {
+		data["error"] = errorFlashes[0]
+	}
+	return data
 }
 
-// CORREÇÃO: O middleware foi movido para aqui e tornado mais inteligente.
 func (h *Handler) AuthRequired(requiredRoles ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		session := sessions.Default(c)
@@ -79,23 +84,6 @@ func (h *Handler) AuthRequired(requiredRoles ...string) gin.HandlerFunc {
 		
 		c.Next()
 	}
-}
-
-// getFlashes lê e apaga as mensagens flash da sessão.
-func getFlashes(c *gin.Context) gin.H {
-	session := sessions.Default(c)
-	successFlashes := session.Flashes("success")
-	errorFlashes := session.Flashes("error")
-	session.Save() // Salva a sessão para limpar as flashes
-
-	data := gin.H{}
-	if len(successFlashes) > 0 {
-		data["success"] = successFlashes[0]
-	}
-	if len(errorFlashes) > 0 {
-		data["error"] = errorFlashes[0]
-	}
-	return data
 }
 
 func (h *Handler) ShowLoginPage(c *gin.Context) {
@@ -335,19 +323,87 @@ func (h *Handler) HandleAddUser(c *gin.Context) {
 	c.Redirect(http.StatusFound, "/admin/dashboard")
 }
 
+func calculateSuggestedPrice(custo, lucro, impostoEst, impostoFed float64) float64 {
+    lucroValor := custo * (lucro / 100)
+    impostoEstValor := custo * (impostoEst / 100)
+    impostoFedValor := custo * (impostoFed / 100)
+    return custo + lucroValor + impostoEstValor + impostoFedValor
+}
+
 func (h *Handler) HandleAddProduct(c *gin.Context) {
-	price, _ := strconv.ParseFloat(c.PostForm("price"), 64)
-	product := models.Product{
-		Nome:          c.PostForm("name"),
-		Descricao:     c.PostForm("description"),
-		CodigoBarras:  c.PostForm("barcode"),
-		PrecoSugerido: price,
-	}
-	err := h.Storage.AddProduct(product)
-	if err != nil {
-		log.Printf("Erro ao adicionar produto: %v", err)
-	}
-	c.Redirect(http.StatusFound, "/admin/dashboard")
+    session := sessions.Default(c)
+    custo, _ := strconv.ParseFloat(c.PostForm("preco_custo"), 64)
+    lucro, _ := strconv.ParseFloat(c.PostForm("percentual_lucro"), 64)
+    impostoEst, _ := strconv.ParseFloat(c.PostForm("imposto_estadual"), 64)
+    impostoFed, _ := strconv.ParseFloat(c.PostForm("imposto_federal"), 64)
+
+    product := models.Product{
+        Nome:          c.PostForm("name"),
+        Descricao:     c.PostForm("description"),
+        CodigoBarras:  c.PostForm("barcode"),
+		CodigoCNAE:      c.PostForm("codigo_cnae"), // CORREÇÃO: Esta linha foi adicionada		
+        PrecoCusto:    custo,
+        PercentualLucro: lucro,
+        ImpostoEstadual: impostoEst,
+        ImpostoFederal: impostoFed,
+        PrecoSugerido: calculateSuggestedPrice(custo, lucro, impostoEst, impostoFed),
+    }
+
+    filialID := c.PostForm("filial_id")
+    quantityStr := c.PostForm("quantity")
+    var err error
+
+    if filialID != "" && quantityStr != "" {
+        quantity, _ := strconv.Atoi(quantityStr)
+        if quantity > 0 {
+            err = h.Storage.CreateProductWithInitialStock(product, filialID, quantity)
+        } else {
+            err = h.Storage.AddProduct(product)
+        }
+    } else {
+        err = h.Storage.AddProduct(product)
+    }
+    
+    if err != nil {
+        log.Printf("Erro ao adicionar produto: %v", err)
+        session.AddFlash(fmt.Sprintf("Falha ao adicionar produto: %v", err), "error")
+    } else {
+        session.AddFlash("Produto adicionado com sucesso!", "success")
+    }
+    session.Save()
+    c.Redirect(http.StatusFound, "/admin/dashboard")
+}
+
+func (h *Handler) HandleEditProduct(c *gin.Context) {
+    session := sessions.Default(c)
+    productID := c.Param("id")
+    
+    custo, _ := strconv.ParseFloat(c.PostForm("preco_custo"), 64)
+    lucro, _ := strconv.ParseFloat(c.PostForm("percentual_lucro"), 64)
+    impostoEst, _ := strconv.ParseFloat(c.PostForm("imposto_estadual"), 64)
+    impostoFed, _ := strconv.ParseFloat(c.PostForm("imposto_federal"), 64)
+
+    product := models.Product{
+        Nome:          c.PostForm("name"),
+        Descricao:     c.PostForm("description"),
+        CodigoBarras:  c.PostForm("barcode"),
+		CodigoCNAE:      c.PostForm("codigo_cnae"), // NOVO		
+        PrecoCusto:    custo,
+        PercentualLucro: lucro,
+        ImpostoEstadual: impostoEst,
+        ImpostoFederal: impostoFed,
+        PrecoSugerido: calculateSuggestedPrice(custo, lucro, impostoEst, impostoFed),
+    }
+    
+    err := h.Storage.UpdateProduct(productID, product)
+    if err != nil {
+        log.Printf("Erro ao atualizar produto: %v", err)
+        session.AddFlash(fmt.Sprintf("Falha ao atualizar produto: %v", err), "error")
+    } else {
+        session.AddFlash("Produto atualizado com sucesso!", "success")
+    }
+    session.Save()
+    c.Redirect(http.StatusFound, "/admin/dashboard")
 }
 
 func (h *Handler) HandleDeleteUser(c *gin.Context) {
@@ -392,12 +448,21 @@ func (h *Handler) HandleAddStockItem(c *gin.Context) {
 	}
 
 	if addType == "new" {
-		price, _ := strconv.ParseFloat(c.PostForm("new_product_price"), 64)
+		custo, _ := strconv.ParseFloat(c.PostForm("new_product_price"), 64)
+        lucro, _ := strconv.ParseFloat(c.PostForm("new_product_lucro"), 64)
+        impostoEst, _ := strconv.ParseFloat(c.PostForm("new_product_imposto_est"), 64)
+        impostoFed, _ := strconv.ParseFloat(c.PostForm("new_product_imposto_fed"), 64)
+
 		newProduct := models.Product{
 			Nome:          c.PostForm("new_product_name"),
 			Descricao:     c.PostForm("new_product_description"),
 			CodigoBarras:  c.PostForm("new_product_barcode"),
-			PrecoSugerido: price,
+			CodigoCNAE:      c.PostForm("new_product_cnae"), // NOVO			
+			PrecoCusto:    custo,
+            PercentualLucro: lucro,
+            ImpostoEstadual: impostoEst,
+            ImpostoFederal: impostoFed,
+            PrecoSugerido: calculateSuggestedPrice(custo, lucro, impostoEst, impostoFed),
 		}
 		err = h.Storage.CreateProductWithInitialStock(newProduct, filialID, quantity)
 	} else {
@@ -655,4 +720,39 @@ func (h *Handler) HandleEditSocio(c *gin.Context) {
 	}
 	session.Save()
 	c.Redirect(http.StatusFound, "/admin/empresa")
+}
+
+func (h *Handler) HandleGetSalesSummary(c *gin.Context) {
+    summary, err := h.Storage.GetSalesSummary()
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Falha ao obter o resumo de vendas."})
+        return
+    }
+    c.JSON(http.StatusOK, summary)
+}
+
+// NOVO: Handler para definir a quantidade de stock a partir do novo modal.
+func (h *Handler) HandleSetStock(c *gin.Context) {
+	session := sessions.Default(c)
+	productID := c.PostForm("product_id")
+	filialID := c.PostForm("filial_id")
+	quantity, err := strconv.Atoi(c.PostForm("quantity"))
+
+	if err != nil || quantity < 0 {
+		session.AddFlash("Quantidade inválida.", "error")
+		session.Save()
+		c.Redirect(http.StatusFound, c.Request.Header.Get("Referer"))
+		return
+	}
+
+	err = h.Storage.UpsertStockQuantity(productID, filialID, quantity)
+	if err != nil {
+		log.Printf("Erro ao definir stock: %v", err)
+		session.AddFlash(fmt.Sprintf("Falha ao definir stock: %v", err), "error")
+	} else {
+		session.AddFlash("Stock atualizado com sucesso!", "success")
+	}
+	session.Save()
+	// Redireciona de volta para o painel de administração, não para a página de stock.
+	c.Redirect(http.StatusFound, "/admin/dashboard")
 }

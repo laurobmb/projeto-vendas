@@ -48,6 +48,12 @@ CREATE TABLE IF NOT EXISTS produtos (
     nome VARCHAR(150) UNIQUE NOT NULL,
     descricao TEXT,
     codigo_barras VARCHAR(100) UNIQUE,
+	codigo_cnae VARCHAR(15),
+	preco_custo DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    percentual_lucro DECIMAL(5, 2) NOT NULL DEFAULT 0,
+    imposto_estadual DECIMAL(5, 2) NOT NULL DEFAULT 0,
+    imposto_federal DECIMAL(5, 2) NOT NULL DEFAULT 0,
+
     preco_sugerido DECIMAL(10, 2) NOT NULL CHECK (preco_sugerido >= 0),
     data_criacao TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     data_atualizacao TIMESTAMPTZ NOT NULL DEFAULT NOW()

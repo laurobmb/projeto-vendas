@@ -21,6 +21,11 @@ type Product struct {
 	Nome              string
 	Descricao         string
 	CodigoBarras      string
+	CodigoCNAE        string `json:"CodigoCNAE,omitempty"`
+	PrecoCusto        float64 // NOVO
+	PercentualLucro   float64 // NOVO
+	ImpostoEstadual   float64 // NOVO
+	ImpostoFederal    float64 // NOVO
 	PrecoSugerido     float64
 	TotalEstoque      int
 	ValorTotalEstoque float64

@@ -45,23 +45,13 @@ func (m *mockStorage) GetUserByEmail(email string) (*models.User, error) {
 	return nil, errors.New("utilizador não encontrado")
 }
 
-func (m *mockStorage) SearchProductsForSale(query string, filialID uuid.UUID) ([]models.Product, error) {
-	if query == "ProdutoExistente" {
-		return []models.Product{
-			{ID: uuid.New(), Nome: "Produto Existente", CodigoBarras: "123", PrecoSugerido: 10.0},
-		}, nil
-	}
-	return []models.Product{}, nil
-}
+func (m *mockStorage) UpdateProduct(productID string, product models.Product) error { return nil }
 
-func (m *mockStorage) RegisterSale(sale models.Venda, items []models.ItemVenda) error {
-	if len(items) == 0 {
-		return errors.New("nenhum item na venda")
-	}
-	return nil
+func (m *mockStorage) GetSalesSummary() ([]models.SalesSummary, error) {
+	return []models.SalesSummary{
+		{FilialNome: "Filial Teste", TotalVendas: 1234.56},
+	}, nil
 }
-
-// Implementações vazias para as outras funções da interface.
 func (m *mockStorage) GetFilialByID(id string) (*models.Filial, error) { return &models.Filial{ID: uuid.New(), Nome: "Filial Teste"}, nil }
 func (m *mockStorage) CountUsers() (int, error)                       { return 1, nil }
 func (m *mockStorage) GetUsersPaginated(limit, offset int) ([]models.User, error) { return []models.User{}, nil }
@@ -71,6 +61,8 @@ func (m *mockStorage) GetAllFiliais() ([]models.Filial, error) { return []models
 func (m *mockStorage) UpdateUser(userID string, user models.User, newPassword string) error { return nil }
 func (m *mockStorage) CountSales(filialID string) (int, error) { return 0, nil }
 func (m *mockStorage) GetSalesPaginated(filialID string, limit, offset int) ([]models.SaleReportItem, error) { return []models.SaleReportItem{}, nil }
+func (m *mockStorage) SearchProductsForSale(query string, filialID uuid.UUID) ([]models.Product, error) { return []models.Product{}, nil }
+func (m *mockStorage) RegisterSale(sale models.Venda, items []models.ItemVenda) error { return nil }
 func (m *mockStorage) CreateProductWithInitialStock(product models.Product, filialID string, quantity int) error { return nil }
 func (m *mockStorage) AddStockItem(productID, filialID string, quantity int) error { return nil }
 func (m *mockStorage) GetAllProductsSimple() ([]models.Product, error) { return []models.Product{}, nil }
@@ -141,7 +133,6 @@ func setupTestRouter() *gin.Engine {
 	return router
 }
 
-// loginAs é uma função auxiliar para simular um login e obter o cookie de sessão.
 func loginAs(router *gin.Engine, email, password string) (*http.Cookie, error) {
 	form := url.Values{}
 	form.Add("email", email)
@@ -221,7 +212,6 @@ func TestAPIHandlers(t *testing.T) {
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
-		// CORREÇÃO: O teste agora espera 401 Unauthorized, que é a resposta correta para um pedido de API não autenticado.
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 	})
 }

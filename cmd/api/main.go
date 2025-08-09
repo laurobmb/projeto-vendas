@@ -88,10 +88,12 @@ func main() {
 		adminRoutes.POST("/users/edit/:id", h.HandleEditUser)
 		adminRoutes.POST("/products/add", h.HandleAddProduct)
 		adminRoutes.POST("/products/delete/:id", h.HandleDeleteProduct)
+		adminRoutes.POST("/products/edit/:id", h.HandleEditProduct) // CORREÇÃO: Adicionada a rota que estava em falta.
+
 		adminRoutes.POST("/stock/update", h.HandleUpdateStock)
 		adminRoutes.POST("/stock/add", h.HandleAddStockItem)
 		adminRoutes.GET("/api/products/:id/stock", h.HandleGetProductStock)
-		adminRoutes.POST("/api/stock/adjust", h.HandleAdjustStock)
+		adminRoutes.POST("/api/stock/set", h.HandleSetStock) // Rota ATUALIZADA
 	}
 
 	apiRoutes := router.Group("/api")

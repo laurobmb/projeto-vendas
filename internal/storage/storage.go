@@ -16,7 +16,7 @@ import (
 	"projeto-vendas/internal/models"
 )
 
-// CORREÇÃO: A interface Store foi atualizada para incluir todas as funções necessárias.
+// Store é a interface que define todas as funções da nossa camada de acesso a dados.
 type Store interface {
 	GetUserByEmail(email string) (*models.User, error)
 	GetFilialByID(id string) (*models.Filial, error)
@@ -36,8 +36,10 @@ type Store interface {
 	CountStockItems(filialID, searchQuery string) (int, error)
 	GetStockItemsPaginated(filialID, searchQuery string, limit, offset int) ([]models.StockViewItem, error)
 	UpdateStockQuantity(productID, filialID string, newQuantity int) error
+	UpsertStockQuantity(productID, filialID string, quantity int) error // Função adicionada
 	AddUser(user models.User, password string) error
 	AddProduct(product models.Product) error
+	UpdateProduct(productID string, product models.Product) error
 	UpdateSocio(socioID string, socio models.Socio) error
 	GetEmpresa() (*models.Empresa, error)
 	UpsertEmpresa(empresa models.Empresa) error
@@ -48,20 +50,26 @@ type Store interface {
 	DeleteProductByID(id string) error
 	GetProductStockByFilial(productID string) ([]models.StockDetail, error)
 	AdjustStockQuantity(productID, filialID string, quantityToRemove int) error
-	GetSalesSummary() ([]models.SalesSummary, error) // Função adicionada
+	GetSalesSummary() ([]models.SalesSummary, error)
 }
 
 type Storage struct {
 	Dbpool *pgxpool.Pool
 }
 
-// NOVO: Struct para o resumo de vendas.
-type SalesSummary struct {
-	FilialNome  string  `json:"filial_nome"`
-	TotalVendas float64 `json:"total_vendas"`
+func NewStorage() (*Storage, error) {
+	if err := godotenv.Load(); err != nil {
+		log.Println("Aviso: Ficheiro .env não encontrado.")
+	}
+	dsn := fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=disable",
+		os.Getenv("DB_USER"), os.Getenv("DB_PASS"), os.Getenv("DB_HOST"), os.Getenv("DB_NAME"))
+	pool, err := pgxpool.New(context.Background(), dsn)
+	if err != nil {
+		return nil, fmt.Errorf("não foi possível conectar ao banco de dados: %w", err)
+	}
+	return &Storage{Dbpool: pool}, nil
 }
 
-// CORREÇÃO: A função agora usa 'models.SalesSummary' para corresponder à interface.
 func (s *Storage) GetSalesSummary() ([]models.SalesSummary, error) {
 	var summary []models.SalesSummary
 	sql := `
@@ -86,22 +94,6 @@ func (s *Storage) GetSalesSummary() ([]models.SalesSummary, error) {
 	}
 	return summary, nil
 }
-
-func NewStorage() (*Storage, error) {
-	if err := godotenv.Load(); err != nil {
-		log.Println("Aviso: Ficheiro .env não encontrado.")
-	}
-	dsn := fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=disable",
-		os.Getenv("DB_USER"), os.Getenv("DB_PASS"), os.Getenv("DB_HOST"), os.Getenv("DB_NAME"))
-	pool, err := pgxpool.New(context.Background(), dsn)
-	if err != nil {
-		return nil, fmt.Errorf("não foi possível conectar ao banco de dados: %w", err)
-	}
-	return &Storage{Dbpool: pool}, nil
-}
-
-// ... (todas as outras funções do ficheiro storage.go permanecem aqui, sem alterações)
-
 
 func (s *Storage) UpdateSocio(socioID string, socio models.Socio) error {
 	sql := `
@@ -220,8 +212,8 @@ func (s *Storage) CreateProductWithInitialStock(product models.Product, filialID
 	}
 	defer tx.Rollback(context.Background())
 	var newProductID string
-	sqlProduct := `INSERT INTO produtos (nome, descricao, codigo_barras, preco_sugerido) VALUES ($1, $2, $3, $4) RETURNING id`
-	err = tx.QueryRow(context.Background(), sqlProduct, product.Nome, product.Descricao, product.CodigoBarras, product.PrecoSugerido).Scan(&newProductID)
+	sqlProduct := `INSERT INTO produtos (nome, descricao, codigo_barras, codigo_cnae, preco_custo, percentual_lucro, imposto_estadual, imposto_federal, preco_sugerido) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`
+	err = tx.QueryRow(context.Background(), sqlProduct, product.Nome, product.Descricao, product.CodigoBarras, product.CodigoCNAE, product.PrecoCusto, product.PercentualLucro, product.ImpostoEstadual, product.ImpostoFederal, product.PrecoSugerido).Scan(&newProductID)
 	if err != nil {
 		return fmt.Errorf("falha ao inserir o produto na transação: %w", err)
 	}
@@ -336,28 +328,43 @@ func (s *Storage) UpdateStockQuantity(productID, filialID string, newQuantity in
 
 func (s *Storage) GetProductsPaginatedAndFiltered(searchQuery string, limit, offset int) ([]models.Product, error) {
 	var products []models.Product
+	
+	// A base da query não muda
 	sql := `
-		SELECT p.id, p.nome, p.descricao, p.codigo_barras, p.preco_sugerido, 
-			COALESCE(SUM(ef.quantidade), 0) as total_estoque,
-			(COALESCE(SUM(ef.quantidade), 0) * p.preco_sugerido) as valor_total_estoque
+		SELECT p.id, p.nome, p.descricao, p.codigo_barras, COALESCE(p.codigo_cnae, ''), p.preco_custo, p.percentual_lucro,
+		p.imposto_estadual, p.imposto_federal, p.preco_sugerido,
+				 COALESCE(SUM(ef.quantidade), 0) as total_estoque,
+				 (COALESCE(SUM(ef.quantidade), 0) * p.preco_sugerido) as valor_total_estoque
 		FROM produtos p
 		LEFT JOIN estoque_filiais ef ON p.id = ef.produto_id
-	`
-	args := []interface{}{limit, offset}
-	argCount := 2
+`
+	// CORREÇÃO: Começamos com uma lista de argumentos vazia
+	var args []interface{}
+	placeholderCount := 1
+
+	// CORREÇÃO: Construímos a cláusula WHERE primeiro, se necessário
 	if searchQuery != "" {
-		argCount++
-		sql += fmt.Sprintf(" WHERE p.nome ILIKE $%d OR p.codigo_barras ILIKE $%d", argCount, argCount)
-		args = append(args, "%"+searchQuery+"%")
+		sql += fmt.Sprintf(" WHERE p.nome ILIKE $%d OR p.codigo_barras ILIKE $%d", placeholderCount, placeholderCount+1)
+		args = append(args, "%"+searchQuery+"%", "%"+searchQuery+"%") // Adiciona o argumento duas vezes para os dois placeholders
+		placeholderCount += 2
 	}
-	sql += fmt.Sprintf(" GROUP BY p.id ORDER BY p.nome LIMIT $%d OFFSET $%d", 1, 2)
-	
+
+	// CORREÇÃO: Adicionamos GROUP BY, ORDER BY e os placeholders de paginação no final
+	sql += fmt.Sprintf(" GROUP BY p.id ORDER BY p.nome LIMIT $%d OFFSET $%d", placeholderCount, placeholderCount+1)
+	args = append(args, limit, offset) // Adicionamos os argumentos de paginação no final, na ordem correta
+
+	// A execução da query agora usa a lista de argumentos construída corretamente
 	rows, err := s.Dbpool.Query(context.Background(), sql, args...)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
+
 	for rows.Next() {
 		var p models.Product
-		if err := rows.Scan(&p.ID, &p.Nome, &p.Descricao, &p.CodigoBarras, &p.PrecoSugerido, &p.TotalEstoque, &p.ValorTotalEstoque); err != nil { return nil, err }
+		if err := rows.Scan(&p.ID, &p.Nome, &p.Descricao, &p.CodigoBarras, &p.CodigoCNAE, &p.PrecoCusto, &p.PercentualLucro, &p.ImpostoEstadual, &p.ImpostoFederal, &p.PrecoSugerido, &p.TotalEstoque, &p.ValorTotalEstoque); err != nil {
+			return nil, err
+		}
 		products = append(products, p)
 	}
 	return products, nil
@@ -433,24 +440,37 @@ func (s *Storage) DeleteProductByID(id string) error {
 	return err
 }
 
+// ATUALIZADO: A query agora usa um RIGHT JOIN para garantir que todas as filiais são listadas.
 func (s *Storage) GetProductStockByFilial(productID string) ([]models.StockDetail, error) {
 	var details []models.StockDetail
 	sql := `
-		SELECT f.id, f.nome, ef.quantidade
-		FROM estoque_filiais ef
-		JOIN filiais f ON ef.filial_id = f.id
-		WHERE ef.produto_id = $1
+		SELECT f.id, f.nome, COALESCE(ef.quantidade, 0) as quantidade
+		FROM filiais f
+		LEFT JOIN estoque_filiais ef ON f.id = ef.filial_id AND ef.produto_id = $1
 		ORDER BY f.nome
 	`
 	rows, err := s.Dbpool.Query(context.Background(), sql, productID)
 	if err != nil { return nil, err }
 	defer rows.Close()
+
 	for rows.Next() {
 		var d models.StockDetail
 		if err := rows.Scan(&d.FilialID, &d.FilialNome, &d.Quantidade); err != nil { return nil, err }
 		details = append(details, d)
 	}
 	return details, nil
+}
+
+// NOVO: Cria um registo de stock se não existir, ou atualiza a quantidade se já existir.
+func (s *Storage) UpsertStockQuantity(productID, filialID string, quantity int) error {
+	sql := `
+		INSERT INTO estoque_filiais (produto_id, filial_id, quantidade)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (produto_id, filial_id)
+		DO UPDATE SET quantidade = $3
+	`
+	_, err := s.Dbpool.Exec(context.Background(), sql, productID, filialID, quantity)
+	return err
 }
 
 func (s *Storage) AdjustStockQuantity(productID, filialID string, quantityToRemove int) error {
@@ -480,8 +500,8 @@ func (s *Storage) AddUser(user models.User, password string) error {
 }
 
 func (s *Storage) AddProduct(product models.Product) error {
-	sql := `INSERT INTO produtos (nome, descricao, codigo_barras, preco_sugerido) VALUES ($1, $2, $3, $4)`
-	_, err := s.Dbpool.Exec(context.Background(), sql, product.Nome, product.Descricao, product.CodigoBarras, product.PrecoSugerido)
+	sql := `INSERT INTO produtos (nome, descricao, codigo_barras, codigo_cnae, preco_custo, percentual_lucro, imposto_estadual, imposto_federal, preco_sugerido) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+	_, err := s.Dbpool.Exec(context.Background(), sql, product.Nome, product.Descricao, product.CodigoBarras, product.CodigoCNAE, product.PrecoCusto, product.PercentualLucro, product.ImpostoEstadual, product.ImpostoFederal, product.PrecoSugerido)
 	return err
 }
 
@@ -491,13 +511,11 @@ func (s *Storage) UpdateUser(userID string, user models.User, newPassword string
 		return fmt.Errorf("não foi possível iniciar a transação: %w", err)
 	}
 	defer tx.Rollback(context.Background())
-
 	sqlDetails := `UPDATE usuarios SET nome = $1, email = $2, cargo = $3, filial_id = $4 WHERE id = $5`
 	_, err = tx.Exec(context.Background(), sqlDetails, user.Nome, user.Email, user.Cargo, user.FilialID, userID)
 	if err != nil {
 		return fmt.Errorf("falha ao atualizar detalhes do utilizador: %w", err)
 	}
-
 	if newPassword != "" {
 		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 		if err != nil {
@@ -509,7 +527,6 @@ func (s *Storage) UpdateUser(userID string, user models.User, newPassword string
 			return fmt.Errorf("falha ao atualizar a senha do utilizador: %w", err)
 		}
 	}
-
 	return tx.Commit(context.Background())
 }
 
@@ -568,4 +585,22 @@ func (s *Storage) AddSocio(socio models.Socio) error {
 func (s *Storage) DeleteSocioByID(id string) error {
 	_, err := s.Dbpool.Exec(context.Background(), "DELETE FROM socios WHERE id = $1", id)
 	return err
+}
+
+func (s *Storage) UpdateProduct(productID string, product models.Product) error {
+    sql := `
+        UPDATE produtos SET 
+            nome = $1, descricao = $2, codigo_barras = $3, preco_custo = $4, 
+            percentual_lucro = $5, imposto_estadual = $6, imposto_federal = $7, preco_sugerido = $8, codigo_cnae = $9,
+            data_atualizacao = NOW()
+        WHERE id = $10
+    `
+    cmdTag, err := s.Dbpool.Exec(context.Background(), sql, 
+        product.Nome, product.Descricao, product.CodigoBarras, product.PrecoCusto,
+        product.PercentualLucro, product.ImpostoEstadual, product.ImpostoFederal, product.PrecoSugerido, product.CodigoCNAE,
+        productID)
+    
+    if err != nil { return err }
+    if cmdTag.RowsAffected() == 0 { return errors.New("nenhum produto foi atualizado (ID não encontrado?)") }
+    return nil
 }

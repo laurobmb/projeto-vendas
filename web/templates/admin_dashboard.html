@@ -12,7 +12,6 @@
 
     <main class="container mx-auto p-6">
         {{ template "_messages.html" . }}
-        <!-- Seção de Utilizadores -->
         <div class="bg-white p-6 rounded-lg shadow-lg mb-8">
             <div class="flex justify-between items-center mb-4 border-b pb-2">
                 <h2 class="text-2xl font-semibold">Gerir Utilizadores</h2>
@@ -38,7 +37,6 @@
                             <td class="py-2 px-4 capitalize">{{ .Cargo }}</td>
                             <td class="py-2 px-4 text-center">
                                 <div class="flex justify-center items-center space-x-2">
-                                    <!-- CORREÇÃO: A lógica para obter o FilialID foi corrigida para evitar erros quando for nulo. -->
                                     <button onclick="openEditUserModal('{{.ID}}', '{{.Nome}}', '{{.Email}}', '{{.Cargo}}', '{{if .FilialID}}{{.FilialID.String}}{{end}}')" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded text-sm">
                                         Editar
                                     </button>
@@ -59,7 +57,6 @@
             {{ template "pagination" dict "P" .PaginationUsers "Type" "users" "OtherP" .PaginationProducts "OtherType" "products" }}
         </div>
 
-        <!-- Seção de Produtos -->
         <div class="bg-white p-6 rounded-lg shadow-lg">
             <div class="flex flex-col md:flex-row justify-between items-center mb-4 border-b pb-2">
                 <h2 class="text-2xl font-semibold mb-2 md:mb-0">Gerir Catálogo de Produtos</h2>
@@ -83,9 +80,10 @@
                         <tr>
                             <th class="py-2 px-4 text-left">Nome</th>
                             <th class="py-2 px-4 text-left">Código de Barras</th>
-                            <th class="py-2 px-4 text-right">Stock Total</th>
-                            <th class="py-2 px-4 text-right">Valor Total em Stock</th>
+                            <th class="py-2 px-4 text-left">CNAE</th>
+                            <th class="py-2 px-4 text-right">Preço de Custo</th>
                             <th class="py-2 px-4 text-right">Preço Sugerido</th>
+                            <th class="py-2 px-4 text-right">Stock Total</th>
                             <th class="py-2 px-4 text-center">Ações</th>
                         </tr>
                     </thead>
@@ -94,13 +92,17 @@
                         <tr class="border-b hover:bg-gray-50">
                             <td class="py-2 px-4">{{ .Nome }}</td>
                             <td class="py-2 px-4 font-mono">{{ .CodigoBarras }}</td>
+                            <td class="py-2 px-4 font-mono">{{ .CodigoCNAE }}</td> 
+                            <td class="py-2 px-4 text-right font-mono text-orange-600">R$ {{ printf "%.2f" .PrecoCusto }}</td>
+                            <td class="py-2 px-4 text-right font-semibold text-green-700">R$ {{ printf "%.2f" .PrecoSugerido }}</td>
                             <td class="py-2 px-4 text-right font-mono">{{ .TotalEstoque }}</td>
-                            <td class="py-2 px-4 text-right font-mono text-green-700 font-semibold">R$ {{ printf "%.2f" .ValorTotalEstoque }}</td>
-                            <td class="py-2 px-4 text-right">R$ {{ printf "%.2f" .PrecoSugerido }}</td>
                             <td class="py-2 px-4 text-center">
                                 <div class="flex justify-center items-center space-x-2">
-                                    <button onclick="openAdjustStockModal('{{.ID}}', '{{.Nome}}')" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded text-sm">
-                                        Ajustar
+                                    <button onclick='openEditProductModal(`{{ . | json }}`)' class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded text-sm">
+                                        Editar
+                                    </button>
+                                    <button onclick="openAdjustStockModal('{{.ID}}', '{{.Nome}}')" class="bg-purple-500 hover:bg-purple-700 text-white font-bold py-1 px-3 rounded text-sm">
+                                        Ajustar Stock
                                     </button>
                                     <form action="/admin/products/delete/{{ .ID }}" method="POST" onsubmit="return confirm('Tem a certeza que deseja APAGAR este produto do catálogo? Esta ação não pode ser desfeita.');">
                                         <button type="submit" class="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-3 rounded text-sm">
@@ -111,8 +113,7 @@
                             </td>
                         </tr>
                         {{ else }}
-                        <tr ><td colspan="6" class="text-center py-4">Nenhum produto encontrado.</td></tr>
-                        {{ end }}
+                        <tr ><td colspan="7" class="text-center py-4">Nenhum produto encontrado.</td></tr> {{ end }}
                     </tbody>
                 </table>
             </div>
@@ -120,7 +121,6 @@
         </div>
     </main>
 
-    <!-- Modal Adicionar Utilizador -->
     <div id="addUserModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-20">
         <div class="bg-white p-8 rounded-lg shadow-2xl w-full max-w-md">
             <h3 class="text-xl font-bold mb-4">Adicionar Novo Utilizador</h3>
@@ -162,11 +162,10 @@
         </div>
     </div>
 
-    <!-- Modal Editar Utilizador -->
     <div id="editUserModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-20">
         <div class="bg-white p-8 rounded-lg shadow-2xl w-full max-w-md">
             <h3 class="text-xl font-bold mb-4">Editar Utilizador</h3>
-            <form action="" method="POST"> <!-- A ação será definida pelo JavaScript -->
+            <form action="" method="POST">
                 <div class="mb-4">
                     <label class="block text-gray-700 text-sm font-bold mb-2">Nome:</label>
                     <input type="text" name="name" required class="w-full px-3 py-2 border rounded">
@@ -205,48 +204,134 @@
     </div>
     
     <div id="addProductModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-20">
-        <div class="bg-white p-8 rounded-lg shadow-2xl w-full max-w-md">
+        <div class="bg-white p-8 rounded-lg shadow-2xl w-full max-w-2xl">
             <h3 class="text-xl font-bold mb-4">Adicionar Novo Produto ao Catálogo</h3>
             <form action="/admin/products/add" method="POST">
-                <div class="mb-4">
-                    <label class="block text-gray-700 text-sm font-bold mb-2">Nome do Produto:</label>
-                    <input type="text" name="name" required class="w-full px-3 py-2 border rounded">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="md:col-span-2">
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Nome do Produto</label>
+                        <input type="text" name="name" required class="w-full px-3 py-2 border rounded">
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Código de Barras</label>
+                        <input type="text" name="barcode" class="w-full px-3 py-2 border rounded">
+                    </div>
+
+                    <div> <label class="block text-gray-700 text-sm font-bold mb-2">Código CNAE</label>
+                        <input type="text" name="codigo_cnae" class="w-full px-3 py-2 border rounded" placeholder="Ex: 4711-3/02">
+                    </div>
+                                        
+                    <div class="md:col-span-2">
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Descrição</label>
+                        <textarea name="description" rows="2" class="w-full px-3 py-2 border rounded"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Preço de Custo (R$)</label>
+                        <input type="number" step="0.01" name="preco_custo" required class="w-full px-3 py-2 border rounded">
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Percentual de Lucro (%)</label>
+                        <input type="number" step="0.01" name="percentual_lucro" required class="w-full px-3 py-2 border rounded">
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Imposto Estadual (%)</label>
+                        <input type="number" step="0.01" name="imposto_estadual" required class="w-full px-3 py-2 border rounded">
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Imposto Federal (%)</label>
+                        <input type="number" step="0.01" name="imposto_federal" required class="w-full px-3 py-2 border rounded">
+                    </div>
                 </div>
-                <div class="mb-4">
-                    <label class="block text-gray-700 text-sm font-bold mb-2">Código de Barras:</label>
-                    <input type="text" name="barcode" class="w-full px-3 py-2 border rounded">
+                <hr class="my-6">
+                <h4 class="text-lg font-semibold mb-2 text-gray-700">Stock Inicial (Opcional)</h4>
+                <p class="text-sm text-gray-500 mb-4">Se preenchido, será criado um registo de stock para a filial selecionada.</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                     <div>
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Filial</label>
+                        <select name="filial_id" class="w-full px-3 py-2 border rounded bg-white">
+                            <option value="">Nenhuma</option>
+                            {{ range .filiais }}
+                            <option value="{{ .ID }}">{{ .Nome }}</option>
+                            {{ end }}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Quantidade Inicial</label>
+                        <input type="number" min="0" name="quantity" class="w-full px-3 py-2 border rounded">
+                    </div>
                 </div>
-                <div class="mb-4">
-                    <label class="block text-gray-700 text-sm font-bold mb-2">Descrição:</label>
-                    <textarea name="description" rows="3" class="w-full px-3 py-2 border rounded"></textarea>
-                </div>
-                <div class="mb-4">
-                    <label class="block text-gray-700 text-sm font-bold mb-2">Preço Sugerido:</label>
-                    <input type="number" step="0.01" name="price" required class="w-full px-3 py-2 border rounded">
-                </div>
-                <div class="flex justify-end space-x-4">
+                <div class="flex justify-end space-x-4 mt-6">
                     <button type="button" onclick="closeModal('addProductModal')" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded">Cancelar</button>
                     <button type="submit" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">Guardar</button>
                 </div>
             </form>
         </div>
     </div>
+
+    <div id="editProductModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-20">
+        <div class="bg-white p-8 rounded-lg shadow-2xl w-full max-w-2xl">
+            <h3 class="text-xl font-bold mb-4">Editar Produto</h3>
+            <form action="" method="POST">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="md:col-span-2">
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Nome do Produto</label>
+                        <input type="text" name="name" required class="w-full px-3 py-2 border rounded">
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Código de Barras</label>
+                        <input type="text" name="barcode" class="w-full px-3 py-2 border rounded">
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Código CNAE</label>
+                        <input type="text" name="codigo_cnae" class="w-full px-3 py-2 border rounded" placeholder="Ex: 4711-3/02">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Descrição</label>
+                        <textarea name="description" rows="2" class="w-full px-3 py-2 border rounded"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Preço de Custo (R$)</label>
+                        <input type="number" step="0.01" name="preco_custo" required class="w-full px-3 py-2 border rounded">
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Percentual de Lucro (%)</label>
+                        <input type="number" step="0.01" name="percentual_lucro" required class="w-full px-3 py-2 border rounded">
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Imposto Estadual (%)</label>
+                        <input type="number" step="0.01" name="imposto_estadual" required class="w-full px-3 py-2 border rounded">
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Imposto Federal (%)</label>
+                        <input type="number" step="0.01" name="imposto_federal" required class="w-full px-3 py-2 border rounded">
+                    </div>
+                </div>
+                <div class="flex justify-end space-x-4 mt-6">
+                    <button type="button" onclick="closeModal('editProductModal')" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded">Cancelar</button>
+                    <button type="submit" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">Guardar Alterações</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <div id="adjustStockModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-20">
         <div class="bg-white p-8 rounded-lg shadow-2xl w-full max-w-lg">
             <h3 class="text-xl font-bold mb-1">Ajustar Stock</h3>
             <p id="adjustStockProductName" class="text-gray-600 mb-4"></p>
-            <div id="adjustStockContent" class="max-h-96 overflow-y-auto"></div>
+            <div id="adjustStockContent" class="max-h-96 overflow-y-auto divide-y">
+                </div>
             <div class="flex justify-end mt-6">
                 <button type="button" onclick="closeModal('adjustStockModal')" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded">Fechar</button>
             </div>
         </div>
     </div>
+
+    
     {{ template "_chat_widget.html" . }}
-
     <script src="/static/js/admin.js"></script>
-    <script src="/static/js/chat.js"></script> <!-- NOVO -->
-
+    <script src="/static/js/chat.js"></script>
 </body>
+
 {{ define "pagination" }}
 <div class="flex justify-center items-center mt-6 space-x-2">
     {{ if .P.HasPrev }}

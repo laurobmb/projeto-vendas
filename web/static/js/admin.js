@@ -32,39 +32,25 @@ async function openAdjustStockModal(productId, productName) {
         const stockDetails = await response.json();
         
         contentDiv.innerHTML = ''; // Limpa o conteúdo
-        if (!stockDetails || stockDetails.length === 0) {
-            contentDiv.innerHTML = '<p class="text-center text-gray-500">Este produto não possui stock em nenhuma filial.</p>';
-            return;
-        }
-
-        const table = document.createElement('table');
-        table.className = 'min-w-full';
-        table.innerHTML = `
-            <thead class="bg-gray-100">
-                <tr>
-                    <th class="py-2 px-4 text-left">Filial</th>
-                    <th class="py-2 px-4 text-right">Stock Atual</th>
-                    <th class="py-2 px-4 text-right">Dar Baixa (Qtd)</th>
-                    <th class="py-2 px-4 text-center">Ação</th>
-                </tr>
-            </thead>
-        `;
-        const tbody = document.createElement('tbody');
+        
         stockDetails.forEach(stock => {
-            const row = document.createElement('tr');
-            row.className = 'border-b';
-            row.innerHTML = `
-                <td class="py-2 px-4">${stock.FilialNome}</td>
-                <td class="py-2 px-4 text-right font-mono">${stock.Quantidade}</td>
-                <td class="py-2 px-4"><input type="number" min="1" max="${stock.Quantidade}" class="w-24 text-right border rounded p-1" id="adjust-qty-${stock.FilialID}"></td>
-                <td class="py-2 px-4 text-center">
-                    <button onclick="submitStockAdjustment('${productId}', '${stock.FilialID}')" class="bg-orange-500 text-white px-3 py-1 rounded text-sm hover:bg-orange-600">Guardar</button>
-                </td>
+            const form = document.createElement('form');
+            form.action = '/admin/api/stock/set';
+            form.method = 'POST';
+            form.className = 'flex items-center justify-between space-x-4 p-2 border-b';
+
+            form.innerHTML = `
+                <input type="hidden" name="product_id" value="${productId}">
+                <input type="hidden" name="filial_id" value="${stock.FilialID}">
+                <span class="flex-1">${stock.FilialNome}</span>
+                <div class="flex items-center">
+                    <label class="text-sm mr-2">Qtd:</label>
+                    <input type="number" name="quantity" value="${stock.Quantidade}" min="0" class="w-24 text-right border rounded p-1">
+                </div>
+                <button type="submit" class="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600">Guardar</button>
             `;
-            tbody.appendChild(row);
+            contentDiv.appendChild(form);
         });
-        table.appendChild(tbody);
-        contentDiv.appendChild(table);
 
     } catch (error) {
         contentDiv.innerHTML = `<p class="text-center text-red-500">${error.message}</p>`;
@@ -106,13 +92,11 @@ async function submitStockAdjustment(productId, filialId) {
     }
 }
 
-// CORREÇÃO: Função movida para este ficheiro partilhado.
 // Alterna os campos no modal de adição de stock
 function toggleNewProductFields(value) {
     const existingFields = document.getElementById('existingProductFields');
     const newFields = document.getElementById('newProductFields');
     
-    // Verifica se os elementos existem antes de tentar aceder às suas propriedades
     if (!existingFields || !newFields) return;
 
     const existingSelect = existingFields.querySelector('select');
@@ -136,27 +120,60 @@ function toggleNewProductFields(value) {
 
 // Garante que o estado inicial está correto ao carregar a página
 document.addEventListener('DOMContentLoaded', () => {
-    // Procura pelo seletor de tipo de adição em qualquer página que carregue este script
     const addTypeSelector = document.querySelector('select[name="add_type"]');
     if (addTypeSelector) {
         toggleNewProductFields(addTypeSelector.value);
     }
 });
 
-// NOVO: Função para abrir e preencher o modal de edição de utilizador.
+// Função para abrir e preencher o modal de edição de utilizador.
 function openEditUserModal(userId, name, email, role, filialId) {
     const modal = document.getElementById('editUserModal');
     if (!modal) return;
 
-    // Atualiza a ação do formulário para o ID do utilizador correto
     modal.querySelector('form').action = `/admin/users/edit/${userId}`;
-
-    // Preenche os campos do formulário com os dados atuais do utilizador
     modal.querySelector('input[name="name"]').value = name;
     modal.querySelector('input[name="email"]').value = email;
     modal.querySelector('select[name="role"]').value = role;
-    modal.querySelector('select[name="filial_id"]').value = filialId || ""; // Lida com filial nula
-    modal.querySelector('input[name="password"]').value = ""; // Limpa o campo da senha
+    modal.querySelector('select[name="filial_id"]').value = filialId || "";
+    modal.querySelector('input[name="password"]').value = "";
 
     openModal('editUserModal');
+}
+
+// CORREÇÃO: Adicionada a função que estava em falta.
+// Função para abrir e preencher o modal de edição de produto.
+function openEditProductModal(productJson) {
+    const modal = document.getElementById('editProductModal');
+    if (!modal) return;
+
+    const product = JSON.parse(productJson);
+
+    modal.querySelector('form').action = `/admin/products/edit/${product.ID}`;
+    modal.querySelector('input[name="name"]').value = product.Nome;
+    modal.querySelector('input[name="barcode"]').value = product.CodigoBarras;
+    modal.querySelector('input[name="codigo_cnae"]').value = product.CodigoCNAE || ''; // ATUALIZADO    
+    modal.querySelector('textarea[name="description"]').value = product.Descricao;
+    modal.querySelector('input[name="preco_custo"]').value = product.PrecoCusto;
+    modal.querySelector('input[name="percentual_lucro"]').value = product.PercentualLucro;
+    modal.querySelector('input[name="imposto_estadual"]').value = product.ImpostoEstadual;
+    modal.querySelector('input[name="imposto_federal"]').value = product.ImpostoFederal;
+
+    openModal('editProductModal');
+}
+
+function openEditSocioModal(socio) {
+    const modal = document.getElementById('editSocioModal');
+    if (!modal) return;
+
+    const socioData = JSON.parse(socio);
+
+    modal.querySelector('form').action = `/admin/socios/edit/${socioData.ID}`;
+    modal.querySelector('input[name="nome"]').value = socioData.Nome;
+    modal.querySelector('input[name="email"]').value = socioData.Email;
+    modal.querySelector('input[name="telefone"]').value = socioData.Telefone;
+    modal.querySelector('input[name="cpf"]').value = socioData.CPF;
+    modal.querySelector('input[name="idade"]').value = socioData.Idade;
+
+    openModal('editSocioModal');
 }
