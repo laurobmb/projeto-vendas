@@ -1,11 +1,15 @@
 package handlers
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"math"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -341,7 +345,7 @@ func (h *Handler) HandleAddProduct(c *gin.Context) {
         Nome:          c.PostForm("name"),
         Descricao:     c.PostForm("description"),
         CodigoBarras:  c.PostForm("barcode"),
-		CodigoCNAE:      c.PostForm("codigo_cnae"), // CORREÇÃO: Esta linha foi adicionada		
+        CodigoCNAE:    c.PostForm("codigo_cnae"),
         PrecoCusto:    custo,
         PercentualLucro: lucro,
         ImpostoEstadual: impostoEst,
@@ -387,7 +391,7 @@ func (h *Handler) HandleEditProduct(c *gin.Context) {
         Nome:          c.PostForm("name"),
         Descricao:     c.PostForm("description"),
         CodigoBarras:  c.PostForm("barcode"),
-		CodigoCNAE:      c.PostForm("codigo_cnae"), // NOVO		
+        CodigoCNAE:    c.PostForm("codigo_cnae"),
         PrecoCusto:    custo,
         PercentualLucro: lucro,
         ImpostoEstadual: impostoEst,
@@ -457,7 +461,6 @@ func (h *Handler) HandleAddStockItem(c *gin.Context) {
 			Nome:          c.PostForm("new_product_name"),
 			Descricao:     c.PostForm("new_product_description"),
 			CodigoBarras:  c.PostForm("new_product_barcode"),
-			CodigoCNAE:      c.PostForm("new_product_cnae"), // NOVO			
 			PrecoCusto:    custo,
             PercentualLucro: lucro,
             ImpostoEstadual: impostoEst,
@@ -495,26 +498,28 @@ func (h *Handler) HandleGetProductStock(c *gin.Context) {
 	c.JSON(http.StatusOK, stockDetails)
 }
 
-func (h *Handler) HandleAdjustStock(c *gin.Context) {
-	var req struct {
-		ProductID string `json:"product_id"`
-		FilialID  string `json:"filial_id"`
-		Quantity  int    `json:"quantity"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Requisição inválida"})
+func (h *Handler) HandleSetStock(c *gin.Context) {
+	session := sessions.Default(c)
+	productID := c.PostForm("product_id")
+	filialID := c.PostForm("filial_id")
+	quantity, err := strconv.Atoi(c.PostForm("quantity"))
+
+	if err != nil || quantity < 0 {
+		session.AddFlash("Quantidade inválida.", "error")
+		session.Save()
+		c.Redirect(http.StatusFound, c.Request.Header.Get("Referer"))
 		return
 	}
-	if req.Quantity <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "A quantidade deve ser positiva."})
-		return
-	}
-	err := h.Storage.AdjustStockQuantity(req.ProductID, req.FilialID, req.Quantity)
+
+	err = h.Storage.UpsertStockQuantity(productID, filialID, quantity)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+		log.Printf("Erro ao definir stock: %v", err)
+		session.AddFlash(fmt.Sprintf("Falha ao definir stock: %v", err), "error")
+	} else {
+		session.AddFlash("Stock atualizado com sucesso!", "success")
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true})
+	session.Save()
+	c.Redirect(http.StatusFound, "/admin/dashboard")
 }
 
 func (h *Handler) HandleSearchProductsForSale(c *gin.Context) {
@@ -731,28 +736,73 @@ func (h *Handler) HandleGetSalesSummary(c *gin.Context) {
     c.JSON(http.StatusOK, summary)
 }
 
-// NOVO: Handler para definir a quantidade de stock a partir do novo modal.
-func (h *Handler) HandleSetStock(c *gin.Context) {
-	session := sessions.Default(c)
-	productID := c.PostForm("product_id")
-	filialID := c.PostForm("filial_id")
-	quantity, err := strconv.Atoi(c.PostForm("quantity"))
-
-	if err != nil || quantity < 0 {
-		session.AddFlash("Quantidade inválida.", "error")
-		session.Save()
-		c.Redirect(http.StatusFound, c.Request.Header.Get("Referer"))
+func (h *Handler) HandleFilterProducts(c *gin.Context) {
+	category := c.Query("category")
+	minPriceStr := c.Query("min_price")
+	
+	minPrice, err := strconv.ParseFloat(minPriceStr, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Parâmetro 'min_price' inválido."})
 		return
 	}
 
-	err = h.Storage.UpsertStockQuantity(productID, filialID, quantity)
+	products, err := h.Storage.FilterProducts(category, minPrice)
 	if err != nil {
-		log.Printf("Erro ao definir stock: %v", err)
-		session.AddFlash(fmt.Sprintf("Falha ao definir stock: %v", err), "error")
-	} else {
-		session.AddFlash("Stock atualizado com sucesso!", "success")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Falha ao filtrar produtos."})
+		return
 	}
-	session.Save()
-	// Redireciona de volta para o painel de administração, não para a página de stock.
-	c.Redirect(http.StatusFound, "/admin/dashboard")
+	c.JSON(http.StatusOK, products)
 }
+
+func (h *Handler) HandleAIChat(c *gin.Context) {
+	var requestBody map[string]interface{}
+	if err := c.ShouldBindJSON(&requestBody); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Corpo do pedido inválido"})
+		return
+	}
+
+	geminiAPIKey := os.Getenv("GEMINI_API_KEY")
+	if geminiAPIKey == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Chave de API da Gemini não está configurada no servidor."})
+		return
+	}
+
+	// ATUALIZADO: O modelo agora é lido a partir das variáveis de ambiente.
+	geminiModel := os.Getenv("GEMINI_MODEL")
+	if geminiModel == "" {
+		geminiModel = "gemini-2.5-flash-preview-05-20" // Modelo padrão
+	}
+	
+	geminiURL := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", geminiModel, geminiAPIKey)
+
+	payloadBytes, err := json.Marshal(requestBody)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Falha ao criar o payload."})
+		return
+	}
+
+	resp, err := http.Post(geminiURL, "application/json", bytes.NewBuffer(payloadBytes))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Falha ao comunicar com a API da Gemini."})
+		return
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Falha ao ler a resposta da API da Gemini."})
+		return
+	}
+
+	c.Data(resp.StatusCode, "application/json", body)
+}
+
+func (h *Handler) HandleGetTopSellers(c *gin.Context) {
+	sellers, err := h.Storage.GetTopSellers()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Falha ao obter o ranking de vendedores."})
+		return
+	}
+	c.JSON(http.StatusOK, sellers)
+}
+

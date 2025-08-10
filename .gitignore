@@ -7,3 +7,4 @@ setup_project.sh
 create_user.yml
 .ansible
 .vscode
+config.env

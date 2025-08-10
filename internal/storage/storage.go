@@ -4,16 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"os"
+	"log"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/joho/godotenv"
 	"golang.org/x/crypto/bcrypt"
 	"projeto-vendas/internal/models"
+	"github.com/joho/godotenv"
+
 )
 
 // Store é a interface que define todas as funções da nossa camada de acesso a dados.
@@ -36,7 +37,7 @@ type Store interface {
 	CountStockItems(filialID, searchQuery string) (int, error)
 	GetStockItemsPaginated(filialID, searchQuery string, limit, offset int) ([]models.StockViewItem, error)
 	UpdateStockQuantity(productID, filialID string, newQuantity int) error
-	UpsertStockQuantity(productID, filialID string, quantity int) error // Função adicionada
+	UpsertStockQuantity(productID, filialID string, quantity int) error
 	AddUser(user models.User, password string) error
 	AddProduct(product models.Product) error
 	UpdateProduct(productID string, product models.Product) error
@@ -51,6 +52,8 @@ type Store interface {
 	GetProductStockByFilial(productID string) ([]models.StockDetail, error)
 	AdjustStockQuantity(productID, filialID string, quantityToRemove int) error
 	GetSalesSummary() ([]models.SalesSummary, error)
+	FilterProducts(category string, minPrice float64) ([]models.Product, error)
+	GetTopSellers() ([]models.TopSeller, error)
 }
 
 type Storage struct {
@@ -58,8 +61,10 @@ type Storage struct {
 }
 
 func NewStorage() (*Storage, error) {
-	if err := godotenv.Load(); err != nil {
-		log.Println("Aviso: Ficheiro .env não encontrado.")
+	if err := godotenv.Load("config.env"); err != nil {
+		if err := godotenv.Load(); err != nil {
+			log.Println("Aviso: Nenhum ficheiro .env ou config.env encontrado.")
+		}
 	}
 	dsn := fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=disable",
 		os.Getenv("DB_USER"), os.Getenv("DB_PASS"), os.Getenv("DB_HOST"), os.Getenv("DB_NAME"))
@@ -328,38 +333,28 @@ func (s *Storage) UpdateStockQuantity(productID, filialID string, newQuantity in
 
 func (s *Storage) GetProductsPaginatedAndFiltered(searchQuery string, limit, offset int) ([]models.Product, error) {
 	var products []models.Product
-	
-	// A base da query não muda
 	sql := `
 		SELECT p.id, p.nome, p.descricao, p.codigo_barras, COALESCE(p.codigo_cnae, ''), p.preco_custo, p.percentual_lucro,
 		p.imposto_estadual, p.imposto_federal, p.preco_sugerido,
-				 COALESCE(SUM(ef.quantidade), 0) as total_estoque,
-				 (COALESCE(SUM(ef.quantidade), 0) * p.preco_sugerido) as valor_total_estoque
+				COALESCE(SUM(ef.quantidade), 0) as total_estoque,
+				(COALESCE(SUM(ef.quantidade), 0) * p.preco_sugerido) as valor_total_estoque
 		FROM produtos p
 		LEFT JOIN estoque_filiais ef ON p.id = ef.produto_id
 `
-	// CORREÇÃO: Começamos com uma lista de argumentos vazia
 	var args []interface{}
 	placeholderCount := 1
-
-	// CORREÇÃO: Construímos a cláusula WHERE primeiro, se necessário
 	if searchQuery != "" {
 		sql += fmt.Sprintf(" WHERE p.nome ILIKE $%d OR p.codigo_barras ILIKE $%d", placeholderCount, placeholderCount+1)
-		args = append(args, "%"+searchQuery+"%", "%"+searchQuery+"%") // Adiciona o argumento duas vezes para os dois placeholders
+		args = append(args, "%"+searchQuery+"%", "%"+searchQuery+"%")
 		placeholderCount += 2
 	}
-
-	// CORREÇÃO: Adicionamos GROUP BY, ORDER BY e os placeholders de paginação no final
 	sql += fmt.Sprintf(" GROUP BY p.id ORDER BY p.nome LIMIT $%d OFFSET $%d", placeholderCount, placeholderCount+1)
-	args = append(args, limit, offset) // Adicionamos os argumentos de paginação no final, na ordem correta
-
-	// A execução da query agora usa a lista de argumentos construída corretamente
+	args = append(args, limit, offset)
 	rows, err := s.Dbpool.Query(context.Background(), sql, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-
 	for rows.Next() {
 		var p models.Product
 		if err := rows.Scan(&p.ID, &p.Nome, &p.Descricao, &p.CodigoBarras, &p.CodigoCNAE, &p.PrecoCusto, &p.PercentualLucro, &p.ImpostoEstadual, &p.ImpostoFederal, &p.PrecoSugerido, &p.TotalEstoque, &p.ValorTotalEstoque); err != nil {
@@ -440,7 +435,6 @@ func (s *Storage) DeleteProductByID(id string) error {
 	return err
 }
 
-// ATUALIZADO: A query agora usa um RIGHT JOIN para garantir que todas as filiais são listadas.
 func (s *Storage) GetProductStockByFilial(productID string) ([]models.StockDetail, error) {
 	var details []models.StockDetail
 	sql := `
@@ -461,7 +455,6 @@ func (s *Storage) GetProductStockByFilial(productID string) ([]models.StockDetai
 	return details, nil
 }
 
-// NOVO: Cria um registo de stock se não existir, ou atualiza a quantidade se já existir.
 func (s *Storage) UpsertStockQuantity(productID, filialID string, quantity int) error {
 	sql := `
 		INSERT INTO estoque_filiais (produto_id, filial_id, quantidade)
@@ -500,7 +493,7 @@ func (s *Storage) AddUser(user models.User, password string) error {
 }
 
 func (s *Storage) AddProduct(product models.Product) error {
-	sql := `INSERT INTO produtos (nome, descricao, codigo_barras, codigo_cnae, preco_custo, percentual_lucro, imposto_estadual, imposto_federal, preco_sugerido) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+	sql := `INSERT INTO produtos (nome, descricao, codigo_barras, codigo_cnae, preco_custo, percentual_lucro, imposto_estadual, imposto_federal, preco_sugerido) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`
 	_, err := s.Dbpool.Exec(context.Background(), sql, product.Nome, product.Descricao, product.CodigoBarras, product.CodigoCNAE, product.PrecoCusto, product.PercentualLucro, product.ImpostoEstadual, product.ImpostoFederal, product.PrecoSugerido)
 	return err
 }
@@ -603,4 +596,56 @@ func (s *Storage) UpdateProduct(productID string, product models.Product) error 
     if err != nil { return err }
     if cmdTag.RowsAffected() == 0 { return errors.New("nenhum produto foi atualizado (ID não encontrado?)") }
     return nil
+}
+
+func (s *Storage) FilterProducts(category string, minPrice float64) ([]models.Product, error) {
+    var products []models.Product
+    sql := `
+        SELECT id, nome, preco_sugerido 
+        FROM produtos 
+        WHERE nome ILIKE $1 AND preco_sugerido > $2
+        ORDER BY preco_sugerido DESC
+        LIMIT 10
+    `
+    rows, err := s.Dbpool.Query(context.Background(), sql, "%"+category+"%", minPrice)
+    if err != nil {
+        return nil, err
+    }
+    defer rows.Close()
+
+    for rows.Next() {
+        var p models.Product
+        if err := rows.Scan(&p.ID, &p.Nome, &p.PrecoSugerido); err != nil {
+            return nil, err
+        }
+        products = append(products, p)
+    }
+    return products, nil
+}
+
+func (s *Storage) GetTopSellers() ([]models.TopSeller, error) {
+	var sellers []models.TopSeller
+	sql := `
+		SELECT u.nome, SUM(v.total_venda) as total
+		FROM vendas v
+		JOIN usuarios u ON v.usuario_id = u.id
+		WHERE v.data_venda >= date_trunc('month', CURRENT_DATE) AND u.cargo = 'vendedor'
+		GROUP BY u.nome
+		ORDER BY total DESC
+		LIMIT 3
+	`
+	rows, err := s.Dbpool.Query(context.Background(), sql)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var seller models.TopSeller
+		if err := rows.Scan(&seller.VendedorNome, &seller.TotalVendas); err != nil {
+			return nil, err
+		}
+		sellers = append(sellers, seller)
+	}
+	return sellers, nil
 }

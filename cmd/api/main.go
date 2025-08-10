@@ -6,32 +6,70 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
+	"runtime"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 	"projeto-vendas/internal/handlers"
 	"projeto-vendas/internal/storage"
 )
 
+func loadEnv() {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		log.Fatal("Não foi possível encontrar o caminho do ficheiro main.")
+	}
+	dir := filepath.Dir(filename)
+
+	// Sobe na árvore de diretórios até encontrar o go.mod
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			break // Encontrou a raiz do projeto
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			log.Fatal("Não foi possível encontrar a raiz do projeto (go.mod).")
+		}
+		dir = parent
+	}
+
+	// Carrega o ficheiro config.env a partir da raiz do projeto
+	envPath := filepath.Join(dir, "config.env") // Volta para a raiz do projeto
+	if err := godotenv.Load(envPath); err != nil {
+		log.Printf("Aviso: Não foi possível carregar o ficheiro config.env de %s: %v", envPath, err)
+	}
+}
+
 func main() {
-	// 1. Inicializa a camada de armazenamento (storage)
+
+	loadEnv()
+
+	// --- TROUBLESHOOTING: Exibe a chave de API encontrada ---
+	apiKey := os.Getenv("GEMINI_API_KEY")
+	if apiKey != "" {
+		log.Printf("✅ Chave de API da Gemini carregada com sucesso. (Final: ...%s)", apiKey[len(apiKey)-4:])
+	} else {
+		log.Println("🚨 AVISO: A variável de ambiente GEMINI_API_KEY não foi encontrada.")
+	}
+	// --- Fim do Troubleshooting ---
+
 	storageLayer, err := storage.NewStorage()
 	if err != nil {
 		log.Fatalf("Falha ao inicializar a camada de armazenamento: %v", err)
 	}
 	defer storageLayer.Dbpool.Close()
 
-	// 2. Inicializa a camada de handlers, injetando a dependência do storage
 	h := handlers.NewHandler(storageLayer)
 
-	// 3. Configura o servidor Gin
 	router := gin.Default()
 	store := cookie.NewStore([]byte("super-secret-key"))
 	router.Use(sessions.Sessions("mysession", store))
 	router.StaticFS("/static", http.Dir("web/static"))
 
-	// ATUALIZADO: Adicionada a função 'json' ao mapa de funções do template.
 	router.SetFuncMap(map[string]interface{}{
 		"dict": func(values ...interface{}) (map[string]interface{}, error) {
 			if len(values)%2 != 0 { return nil, errors.New("invalid dict call") }
@@ -60,20 +98,20 @@ func main() {
 
 	// --- Rotas Protegidas ---
 	stockRoutes := router.Group("/estoque")
-	stockRoutes.Use(AuthRequired("estoquista", "admin"))
+	stockRoutes.Use(h.AuthRequired("estoquista", "admin")) // CORREÇÃO
 	{
 		stockRoutes.GET("/dashboard", h.ShowEstoquistaDashboard)
 		stockRoutes.POST("/add", h.HandleAddStockItem)
 	}
 	
 	salesRoutes := router.Group("/vendas")
-	salesRoutes.Use(AuthRequired("vendedor", "admin"))
+	salesRoutes.Use(h.AuthRequired("vendedor", "admin")) // CORREÇÃO
 	{
 		salesRoutes.GET("/terminal", h.ShowSalesTerminalPage)
 	}
 
 	adminRoutes := router.Group("/admin")
-	adminRoutes.Use(AuthRequired("admin")) 
+	adminRoutes.Use(h.AuthRequired("admin")) // CORREÇÃO
 	{
 		adminRoutes.GET("/dashboard", h.ShowAdminDashboard)
 		adminRoutes.GET("/stock", h.ShowStockManagementPage)
@@ -88,21 +126,22 @@ func main() {
 		adminRoutes.POST("/users/edit/:id", h.HandleEditUser)
 		adminRoutes.POST("/products/add", h.HandleAddProduct)
 		adminRoutes.POST("/products/delete/:id", h.HandleDeleteProduct)
-		adminRoutes.POST("/products/edit/:id", h.HandleEditProduct) // CORREÇÃO: Adicionada a rota que estava em falta.
-
+		adminRoutes.POST("/products/edit/:id", h.HandleEditProduct)
 		adminRoutes.POST("/stock/update", h.HandleUpdateStock)
 		adminRoutes.POST("/stock/add", h.HandleAddStockItem)
 		adminRoutes.GET("/api/products/:id/stock", h.HandleGetProductStock)
-		adminRoutes.POST("/api/stock/set", h.HandleSetStock) // Rota ATUALIZADA
+		adminRoutes.POST("/api/stock/set", h.HandleSetStock)
 	}
 
 	apiRoutes := router.Group("/api")
-	apiRoutes.Use(AuthRequired("vendedor", "admin"))
+	apiRoutes.Use(h.AuthRequired("vendedor", "admin", "estoquista")) // CORREÇÃO
 	{
 		apiRoutes.GET("/products/search", h.HandleSearchProductsForSale)
 		apiRoutes.POST("/sales", h.HandleRegisterSale)
-		apiRoutes.GET("/sales/summary", h.HandleGetSalesSummary) // NOVA ROTA
-
+		apiRoutes.GET("/sales/summary", h.HandleGetSalesSummary)
+		apiRoutes.GET("/products/filter", h.HandleFilterProducts)
+		apiRoutes.GET("/sales/topsellers", h.HandleGetTopSellers) // NOVA ROTA
+		apiRoutes.POST("/chat", h.HandleAIChat)
 	}
 
 	// Redirecionamento principal
@@ -127,32 +166,4 @@ func main() {
 
 	log.Println("🚀 Servidor iniciado em http://localhost:8080")
 	router.Run(":8080")
-}
-
-// Middleware de autenticação que aceita múltiplos cargos.
-func AuthRequired(requiredRoles ...string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		session := sessions.Default(c)
-		userRole, ok := session.Get("userRole").(string)
-		if !ok {
-			c.Redirect(http.StatusFound, "/login")
-			c.Abort()
-			return
-		}
-		
-		for _, role := range requiredRoles {
-			if userRole == role {
-				c.Next()
-				return
-			}
-		}
-		
-		log.Printf("Acesso negado para o utilizador com cargo '%s'. Rota requer um dos seguintes cargos: %v", userRole, requiredRoles)
-		c.HTML(http.StatusForbidden, "error.html", gin.H{
-			"title":        "Acesso Negado",
-			"StatusCode":   http.StatusForbidden,
-			"ErrorMessage": "Acesso Negado",
-		})
-		c.Abort()
-	}
 }

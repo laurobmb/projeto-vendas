@@ -7,15 +7,16 @@
 </div>
 
 <!-- Janela de Chat -->
-<div id="chat-window" class="fixed bottom-24 right-6 w-full max-w-md h-[32rem] bg-white rounded-lg shadow-2xl flex-col hidden z-50">
-    <div class="bg-gray-800 text-white p-4 rounded-t-lg flex justify-between items-center">
+<!-- CORREÇÃO: Adicionada a classe 'flex' para ativar o layout flexível. -->
+<div id="chat-window" class="fixed bottom-24 right-6 w-full max-w-md h-[32rem] bg-white rounded-lg shadow-2xl flex flex-col hidden z-50">
+    <div class="bg-gray-800 text-white p-4 rounded-t-lg flex justify-between items-center flex-shrink-0">
         <h3 class="font-bold">Assistente de IA</h3>
         <button id="close-chat" class="text-gray-300 hover:text-white text-2xl leading-none">&times;</button>
     </div>
     <div id="chat-messages" class="flex-1 p-4 overflow-y-auto bg-gray-50">
         <!-- Mensagens do chat aparecerão aqui -->
     </div>
-    <div class="p-4 border-t bg-white rounded-b-lg">
+    <div class="p-4 border-t bg-white rounded-b-lg flex-shrink-0">
         <form id="chat-form" class="flex space-x-2">
             <input type="text" id="chat-input" placeholder="Pergunte algo..." class="flex-1 border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" autocomplete="off">
             <button type="submit" class="bg-blue-600 text-white font-bold px-4 py-2 rounded-md hover:bg-blue-700">Enviar</button>

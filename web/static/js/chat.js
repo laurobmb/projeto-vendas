@@ -1,7 +1,10 @@
 document.addEventListener('DOMContentLoaded', () => {
     // --- Configurações do Assistente de IA ---
+    const AI_PROVIDER = "gemini"; // Mude para "ollama" para usar o seu modelo local
+
+    // Configurações do Ollama (usadas apenas se AI_PROVIDER for "ollama")
     const OLLAMA_URL = "http://localhost:11434/api/generate";
-    const OLLAMA_MODEL = "llama2"; // IMPORTANTE: Mude para o nome do modelo que tem no Ollama (ex: "llama3", "mistral")
+    const OLLAMA_MODEL = "llama2";
     // -----------------------------------------
 
     const chatIcon = document.getElementById('chat-icon');
@@ -11,13 +14,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const chatInput = document.getElementById('chat-input');
     const chatMessages = document.getElementById('chat-messages');
 
-    if (!chatIcon) return; // Não faz nada se o widget não estiver na página
+    let chatHistory = [];
 
-    // Abre e fecha o chat
+    if (!chatIcon) return;
+
     chatIcon.addEventListener('click', () => chatWindow.classList.toggle('hidden'));
     closeChatBtn.addEventListener('click', () => chatWindow.classList.add('hidden'));
 
-    // Envio de mensagem
     chatForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const userMessage = chatInput.value.trim();
@@ -25,6 +28,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         addMessage(userMessage, 'user');
         chatInput.value = '';
+        chatInput.disabled = true;
+        chatForm.querySelector('button').disabled = true;
         showThinkingIndicator();
 
         try {
@@ -32,9 +37,12 @@ document.addEventListener('DOMContentLoaded', () => {
             addMessage(aiResponse, 'ai');
         } catch (error) {
             console.error("Erro ao comunicar com a IA:", error);
-            addMessage("Desculpe, ocorreu um erro ao tentar processar o seu pedido. Verifique se o Ollama está a correr.", 'ai-error');
+            addMessage("Desculpe, ocorreu um erro ao tentar processar o seu pedido.", 'ai-error');
         } finally {
             removeThinkingIndicator();
+            chatInput.disabled = false;
+            chatForm.querySelector('button').disabled = false;
+            chatInput.focus();
         }
     });
 
@@ -72,18 +80,116 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // --- Lógica de Ferramentas e API ---
+
+    const tools = {
+        async getSalesSummary() {
+            return await fetch('/api/sales/summary').then(res => res.json());
+        },
+        async filterProducts(category, min_price) {
+            return await fetch(`/api/products/filter?category=${category}&min_price=${min_price}`).then(res => res.json());
+        },
+        async getTopSellers() {
+            return await fetch('/api/sales/topsellers').then(res => res.json());
+        }
+    };
+
+    // --- Roteador de IA ---
+
     async function getAIResponse(prompt) {
+        chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+
+        if (AI_PROVIDER === 'gemini') {
+            return await getGeminiResponse();
+        } else {
+            return await getOllamaResponse(prompt);
+        }
+    }
+
+    // --- Lógica para o Gemini (com Tool Calling via Proxy) ---
+
+    async function getGeminiResponse() {
+        const geminiTools = [{
+            functionDeclarations: [
+                { name: "getSalesSummary", description: "Obtém um resumo de vendas por filial." },
+                {
+                    name: "filterProducts",
+                    description: "Filtra produtos por categoria e preço mínimo.",
+                    parameters: {
+                        type: "OBJECT",
+                        properties: {
+                            category: { type: "STRING", description: "A categoria do produto a ser pesquisada." },
+                            min_price: { type: "NUMBER", description: "O preço mínimo para o filtro." }
+                        },
+                        required: ["category", "min_price"]
+                    }
+                },
+                { name: "getTopSellers", description: "Obtém o ranking dos 3 melhores vendedores do mês atual." }
+            ]
+        }];
+
+        const payload = {
+            contents: chatHistory,
+            tools: geminiTools,
+            systemInstruction: {
+                role: "system",
+                parts: [{ text: `
+                    Você é um assistente de negócios. Se o utilizador perguntar "quem é você?", apresente-se e descreva as suas capacidades com base nas ferramentas que conhece.
+                    As suas ferramentas são: getSalesSummary, filterProducts, e getTopSellers.
+                `}]
+            }
+        };
+
+        const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok) throw new Error(`Erro no proxy da API: ${response.statusText}`);
+        
+        const result = await response.json();
+        const part = result.candidates[0].content.parts[0];
+        
+        if (part.functionCall) {
+            const { name, args } = part.functionCall;
+            let toolResult;
+
+            if (name === 'getSalesSummary' || name === 'getTopSellers') {
+                toolResult = await tools[name]();
+            } else if (name === 'filterProducts') {
+                toolResult = await tools.filterProducts(args.category, args.min_price);
+            }
+            
+            chatHistory.push({ role: "model", parts: [{ functionCall: { name, args } }] });
+            chatHistory.push({ role: "function", parts: [{ functionResponse: { name, response: { result: toolResult } } }] });
+            
+            return await getGeminiResponse();
+        }
+        
+        chatHistory.push(result.candidates[0].content);
+        return part.text;
+    }
+
+    // --- Lógica para o Ollama (com simulação de Tool Calling) ---
+
+    async function getOllamaResponse(prompt) {
         const systemPrompt = `
-            Você é um assistente de negócios. Você tem acesso a uma ferramenta: getSalesSummary().
-            Quando o utilizador pedir um resumo de vendas, faturamento por filial ou algo semelhante,
-            responda APENAS com o texto exato: FUNCTION_CALL_GET_SALES_SUMMARY.
+            Você é um assistente de negócios. Você tem acesso a três ferramentas:
+            1. getSalesSummary()
+            2. filterProducts(category: string, min_price: number)
+            3. getTopSellers()
+
+            Quando o utilizador pedir o ranking de vendedores, responda APENAS com o JSON: {"functionCall": "getTopSellers"}.
+            Quando o utilizador pedir um resumo de vendas, responda APENAS com o JSON: {"functionCall": "getSalesSummary"}.
+            Quando o utilizador pedir para filtrar produtos, responda APENAS com um JSON como este: {"functionCall": "filterProducts", "category": "nome_da_categoria", "min_price": valor_numerico}.
             Para qualquer outra pergunta, responda normalmente.
         `;
 
         const payload = {
             model: OLLAMA_MODEL,
             prompt: `${systemPrompt}\n\nUtilizador: ${prompt}`,
-            stream: false
+            stream: false,
+            format: "json"
         };
 
         const response = await fetch(OLLAMA_URL, {
@@ -91,38 +197,64 @@ document.addEventListener('DOMContentLoaded', () => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-
-        if (!response.ok) {
-            throw new Error(`Erro na API do Ollama: ${response.statusText}`);
-        }
+        if (!response.ok) throw new Error(`Erro na API do Ollama: ${response.statusText}`);
 
         const result = await response.json();
         const aiText = result.response.trim();
 
-        if (aiText === 'FUNCTION_CALL_GET_SALES_SUMMARY') {
-            const summaryData = await fetch('/api/sales/summary').then(res => res.json());
-            
-            let dataPrompt = "Aqui estão os dados do resumo de vendas:\n";
-            summaryData.forEach(item => {
-                dataPrompt += `- ${item.filial_nome}: R$ ${item.total_vendas.toFixed(2)}\n`;
-            });
-            dataPrompt += "\nPor favor, apresente estes dados ao utilizador de forma amigável e resumida.";
-
-            const finalPayload = {
-                model: OLLAMA_MODEL,
-                prompt: dataPrompt,
-                stream: false
-            };
-            const finalResponse = await fetch(OLLAMA_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(finalPayload)
-            });
-            const finalResult = await finalResponse.json();
-            return finalResult.response;
+        try {
+            const parsedResponse = JSON.parse(aiText);
+            if (parsedResponse.functionCall === 'getSalesSummary') {
+                const summaryData = await tools.getSalesSummary();
+                let dataPrompt = "Aqui estão os dados do resumo de vendas:\n";
+                summaryData.forEach(item => {
+                    dataPrompt += `- ${item.filial_nome}: R$ ${item.total_vendas.toFixed(2)}\n`;
+                });
+                dataPrompt += "\nApresente estes dados ao utilizador de forma amigável.";
+                return await getOllamaFinalAnswer(dataPrompt);
+            }
+            if (parsedResponse.functionCall === 'filterProducts') {
+                const { category, min_price } = parsedResponse;
+                const filteredProducts = await tools.filterProducts(category, min_price);
+                let dataPrompt = `Aqui está a lista de produtos da categoria '${category}' com preço superior a R$ ${min_price}:\n`;
+                if (!filteredProducts || filteredProducts.length === 0) {
+                    dataPrompt = `Não encontrei produtos da categoria '${category}' com preço superior a R$ ${min_price}.`;
+                } else {
+                    filteredProducts.forEach(item => {
+                        dataPrompt += `- ${item.Nome}: R$ ${item.PrecoSugerido.toFixed(2)}\n`;
+                    });
+                }
+                dataPrompt += "\nApresente esta lista ao utilizador.";
+                return await getOllamaFinalAnswer(dataPrompt);
+            }
+            if (parsedResponse.functionCall === 'getTopSellers') {
+                const topSellers = await tools.getTopSellers();
+                let dataPrompt = "Aqui está o ranking dos 3 melhores vendedores do mês:\n";
+                if (!topSellers || topSellers.length === 0) {
+                    dataPrompt = "Ainda não há dados de vendas suficientes para gerar um ranking este mês.";
+                } else {
+                    topSellers.forEach((seller, index) => {
+                        dataPrompt += `${index + 1}. ${seller.vendedor_nome}: R$ ${seller.total_vendas.toFixed(2)}\n`;
+                    });
+                }
+                dataPrompt += "\nApresente esta informação ao utilizador.";
+                return await getOllamaFinalAnswer(dataPrompt);
+            }
+        } catch (e) {
+            return aiText;
         }
-
         return aiText;
+    }
+
+    async function getOllamaFinalAnswer(prompt) {
+        const finalPayload = { model: OLLAMA_MODEL, prompt: prompt, stream: false };
+        const finalResponse = await fetch(OLLAMA_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(finalPayload)
+        });
+        const finalResult = await finalResponse.json();
+        return finalResult.response;
     }
 
     addMessage("Olá! Como posso ajudar na análise do seu negócio hoje?", 'ai');

@@ -115,3 +115,8 @@ type SalesSummary struct {
 	FilialNome  string  `json:"filial_nome"`
 	TotalVendas float64 `json:"total_vendas"`
 }
+
+type TopSeller struct {
+	VendedorNome string  `json:"vendedor_nome"`
+	TotalVendas  float64 `json:"total_vendas"`
+}
