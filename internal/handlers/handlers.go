@@ -806,3 +806,20 @@ func (h *Handler) HandleGetTopSellers(c *gin.Context) {
 	c.JSON(http.StatusOK, sellers)
 }
 
+func (h *Handler) HandleGetLowStockProducts(c *gin.Context) {
+	limitStr := c.DefaultQuery("limit", "5") // Padrão de 5 itens se não for especificado
+	filialNome := c.Query("filial")
+
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Parâmetro 'limit' inválido."})
+		return
+	}
+
+	products, err := h.Storage.GetLowStockProducts(filialNome, limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Falha ao obter produtos com stock baixo."})
+		return
+	}
+	c.JSON(http.StatusOK, products)
+}

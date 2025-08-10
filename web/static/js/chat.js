@@ -1,6 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
     // --- Configurações do Assistente de IA ---
-    const AI_PROVIDER = "gemini"; // Mude para "ollama" para usar o seu modelo local
+    const AI_PROVIDER = "gemini"; // voce pode usar ollama ou gemini
 
     // Configurações do Ollama (usadas apenas se AI_PROVIDER for "ollama")
     const OLLAMA_URL = "http://localhost:11434/api/generate";
@@ -91,6 +91,13 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         async getTopSellers() {
             return await fetch('/api/sales/topsellers').then(res => res.json());
+        },
+        async getLowStockProducts(limit, filial) {
+            let url = `/api/stock/low?limit=${limit || 5}`;
+            if (filial) {
+                url += `&filial=${encodeURIComponent(filial)}`;
+            }
+            return await fetch(url).then(res => res.json());
         }
     };
 
@@ -124,7 +131,19 @@ document.addEventListener('DOMContentLoaded', () => {
                         required: ["category", "min_price"]
                     }
                 },
-                { name: "getTopSellers", description: "Obtém o ranking dos 3 melhores vendedores do mês atual." }
+                { name: "getTopSellers", description: "Obtém o ranking dos 3 melhores vendedores do mês atual." },
+                {
+                    name: "getLowStockProducts",
+                    description: "Obtém uma lista de produtos com o stock mais baixo. Pode ser filtrado por filial.",
+                    parameters: {
+                        type: "OBJECT",
+                        properties: {
+                            limit: { type: "NUMBER", description: "O número de produtos a retornar. Padrão é 5." },
+                            filial: { type: "STRING", description: "O nome da filial para filtrar. Se omitido, busca em todas as filiais." }
+                        },
+                        required: ["limit"]
+                    }
+                }
             ]
         }];
 
@@ -135,7 +154,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 role: "system",
                 parts: [{ text: `
                     Você é um assistente de negócios. Se o utilizador perguntar "quem é você?", apresente-se e descreva as suas capacidades com base nas ferramentas que conhece.
-                    As suas ferramentas são: getSalesSummary, filterProducts, e getTopSellers.
+                    As suas ferramentas são: getSalesSummary, filterProducts, getTopSellers, e getLowStockProducts.
                 `}]
             }
         };
@@ -158,6 +177,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 toolResult = await tools[name]();
             } else if (name === 'filterProducts') {
                 toolResult = await tools.filterProducts(args.category, args.min_price);
+            } else if (name === 'getLowStockProducts') {
+                toolResult = await tools.getLowStockProducts(args.limit, args.filial);
             }
             
             chatHistory.push({ role: "model", parts: [{ functionCall: { name, args } }] });
@@ -174,14 +195,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function getOllamaResponse(prompt) {
         const systemPrompt = `
-            Você é um assistente de negócios. Você tem acesso a três ferramentas:
+            Você é um assistente de negócios. Você tem acesso a quatro ferramentas:
             1. getSalesSummary()
             2. filterProducts(category: string, min_price: number)
             3. getTopSellers()
+            4. getLowStockProducts(limit: number, filial?: string)
 
             Quando o utilizador pedir o ranking de vendedores, responda APENAS com o JSON: {"functionCall": "getTopSellers"}.
             Quando o utilizador pedir um resumo de vendas, responda APENAS com o JSON: {"functionCall": "getSalesSummary"}.
             Quando o utilizador pedir para filtrar produtos, responda APENAS com um JSON como este: {"functionCall": "filterProducts", "category": "nome_da_categoria", "min_price": valor_numerico}.
+            Quando o utilizador pedir para ver produtos com stock baixo, responda APENAS com um JSON como este: {"functionCall": "getLowStockProducts", "limit": numero_de_itens, "filial": "nome_da_filial_ou_omitido"}.
             Para qualquer outra pergunta, responda normalmente.
         `;
 
@@ -238,6 +261,25 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                 }
                 dataPrompt += "\nApresente esta informação ao utilizador.";
+                return await getOllamaFinalAnswer(dataPrompt);
+            }
+            if (parsedResponse.functionCall === 'getLowStockProducts') {
+                const { limit, filial } = parsedResponse;
+                const lowStockProducts = await tools.getLowStockProducts(limit, filial);
+                let dataPrompt = `Aqui está a lista dos ${limit || 5} produtos com o stock mais baixo`;
+                if (filial) {
+                    dataPrompt += ` na filial '${filial}'`;
+                }
+                dataPrompt += ':\n';
+
+                if (!lowStockProducts || lowStockProducts.length === 0) {
+                    dataPrompt = "Não encontrei produtos com stock baixo para os filtros selecionados.";
+                } else {
+                    lowStockProducts.forEach(item => {
+                        dataPrompt += `- ${item.produto_nome} (${item.filial_nome}): ${item.quantidade} unidades\n`;
+                    });
+                }
+                dataPrompt += "\nApresente esta informação de forma clara ao utilizador.";
                 return await getOllamaFinalAnswer(dataPrompt);
             }
         } catch (e) {

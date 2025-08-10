@@ -141,6 +141,7 @@ func main() {
 		apiRoutes.GET("/sales/summary", h.HandleGetSalesSummary)
 		apiRoutes.GET("/products/filter", h.HandleFilterProducts)
 		apiRoutes.GET("/sales/topsellers", h.HandleGetTopSellers) // NOVA ROTA
+		apiRoutes.GET("/stock/low", h.HandleGetLowStockProducts) // NOVA ROTA
 		apiRoutes.POST("/chat", h.HandleAIChat)
 	}
 

@@ -54,6 +54,8 @@ type Store interface {
 	GetSalesSummary() ([]models.SalesSummary, error)
 	FilterProducts(category string, minPrice float64) ([]models.Product, error)
 	GetTopSellers() ([]models.TopSeller, error)
+	GetLowStockProducts(filialNome string, limit int) ([]models.LowStockProduct, error)
+
 }
 
 type Storage struct {
@@ -648,4 +650,40 @@ func (s *Storage) GetTopSellers() ([]models.TopSeller, error) {
 		sellers = append(sellers, seller)
 	}
 	return sellers, nil
+}
+
+func (s *Storage) GetLowStockProducts(filialNome string, limit int) ([]models.LowStockProduct, error) {
+	var products []models.LowStockProduct
+	sql := `
+		SELECT p.nome, f.nome, ef.quantidade
+		FROM estoque_filiais ef
+		JOIN produtos p ON ef.produto_id = p.id
+		JOIN filiais f ON ef.filial_id = f.id
+	`
+	args := []interface{}{}
+	placeholderCount := 1
+
+	if filialNome != "" {
+		sql += fmt.Sprintf(" WHERE f.nome ILIKE $%d", placeholderCount)
+		args = append(args, filialNome)
+		placeholderCount++
+	}
+
+	sql += fmt.Sprintf(" ORDER BY ef.quantidade ASC LIMIT $%d", placeholderCount)
+	args = append(args, limit)
+
+	rows, err := s.Dbpool.Query(context.Background(), sql, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var p models.LowStockProduct
+		if err := rows.Scan(&p.ProdutoNome, &p.FilialNome, &p.Quantidade); err != nil {
+			return nil, err
+		}
+		products = append(products, p)
+	}
+	return products, nil
 }

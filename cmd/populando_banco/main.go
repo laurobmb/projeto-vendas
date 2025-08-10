@@ -24,7 +24,7 @@ type Produto struct {
 	Nome            string
 	Descricao       string
 	CodigoBarras    string
-	CodigoCNAE      string // NOVO	
+	CodigoCNAE      string
 	PrecoCusto      float64
 	PercentualLucro float64
 	ImpostoEstadual float64
@@ -69,16 +69,20 @@ type StockItem struct {
 }
 
 const (
-	numProdutos = 2000 // Total de produtos a serem criados
+	numProdutos = 10000 // Total de produtos a serem criados
 	numWorkers  = 10   // Número de goroutines para inserção no DB
 )
 
 var (
 	categorias = map[string][]string{
-		"Alimentos":    {"Arroz", "Feijão", "Macarrão", "Óleo de Soja", "Açúcar", "Café", "Leite em Pó", "Farinha de Trigo", "Biscoito", "Molho de Tomate"},
-		"Limpeza":      {"Sabão em Pó", "Detergente", "Água Sanitária", "Desinfetante", "Amaciante de Roupas", "Limpador Multiuso"},
-		"Higiene":      {"Sabonete", "Shampoo", "Condicionador", "Creme Dental", "Papel Higiénico", "Desodorante"},
-		"Eletrónicos":  {"Smartphone", "Notebook", "TV LED 4K", "Fone de Ouvido Bluetooth", "Smartwatch", "Carregador Portátil", "Mouse Sem Fio"},
+		"Alimentos":        {"Arroz", "Feijão", "Macarrão", "Óleo de Soja", "Açúcar", "Café", "Leite em Pó", "Farinha de Trigo", "Biscoito", "Molho de Tomate", "Sal", "Aveia", "Achocolatado em Pó", "Milho Verde", "Ervilha", "Sardinha em Lata", "Atum em Lata", "Margarina", "Manteiga", "Gelatina", "Fermento em Pó", "Batata Chips", "Pipoca de Micro-ondas"},
+		"Limpeza":          {"Sabão em Pó", "Detergente", "Água Sanitária", "Desinfetante", "Amaciante de Roupas", "Limpador Multiuso", "Saponáceo", "Removedor de Gordura", "Esponja de Aço", "Esponja Multiuso", "Pano de Chão", "Rodo", "Vassoura"},
+		"Higiene":          {"Sabonete", "Shampoo", "Condicionador", "Creme Dental", "Papel Higiénico", "Desodorante", "Escova de Dentes", "Fio Dental", "Lenço Umedecido", "Álcool em Gel", "Absorvente Feminino", "Aparelho de Barbear"},
+		"Eletrónicos":      {"Smartphone", "Notebook", "TV LED 4K", "Fone de Ouvido Bluetooth", "Smartwatch", "Carregador Portátil", "Mouse Sem Fio", "Teclado Sem Fio", "Caixa de Som Bluetooth", "Tablet", "Roteador Wi-Fi", "Câmera de Segurança", "Console de Videogame"},
+		"Eletrodomésticos": {"Liquidificador", "Batedeira", "Fritadeira Elétrica", "Micro-ondas", "Geladeira", "Fogão", "Aspirador de Pó", "Ventilador", "Ar-Condicionado", "Cafeteira Elétrica", "Sanduicheira", "Chaleira Elétrica", "Torradeira"},
+		"Bebidas":          {"Água Mineral", "Refrigerante", "Suco de Caixinha", "Suco Concentrado", "Energético", "Cerveja", "Vinho", "Whisky", "Vodka", "Água de Coco", "Chá Gelado", "Café Pronto", "Leite"},
+		"Bazar":            {"Baldes", "Vasilhas Plásticas", "Panelas", "Copos de Vidro", "Pratos", "Talheres", "Travessas", "Assadeiras", "Jarras", "Potes Herméticos", "Cadeiras Plásticas", "Mesa Dobrável"},
+		"Ferramentas":      {"Chave de Fenda", "Martelo", "Alicate", "Trena", "Parafusadeira", "Furadeira", "Chave Inglesa", "Serrote", "Nível", "Caixa de Ferramentas"},
 	}
 	marcas  = []string{"Top", "Premium", "Value", "Gold", "Basic", "Tech", "Fresh", "Clean"}
 	modelos = []string{"X100", "Pro", "S-Line", "Max", "Lite", "Ultra", "2.0"}
@@ -117,7 +121,7 @@ func main() {
 	log.Printf("✅ Garantida a existência de %d vendedores.", len(vendedores))
 
 	// Passo 4: Produtos
-	log.Println("⚙️ A gerar 2000 produtos variados...")
+	log.Printf("⚙️ A gerar %d produtos variados...", numProdutos)
 	produtos := generateProdutos(numProdutos)
 	log.Println("✅ Lista de produtos gerada.")
 	log.Println("⏳ A inserir produtos no banco de dados...")
@@ -160,26 +164,34 @@ func createAdmin(dbpool *pgxpool.Pool) error {
 }
 
 func createStockManagers(dbpool *pgxpool.Pool, filiais []Filial) error {
-	if len(filiais) < 3 {
-		return errors.New("são necessárias pelo menos 3 filiais para criar os estoquistas")
+	if len(filiais) == 0 {
+		return errors.New("nenhuma filial disponível para associar aos estoquistas")
 	}
 
 	stockManagersData := []map[string]string{
 		{"name": "Carlos Estoquista", "email": "carlos.estoque@email.com", "password": "1q2w3e"},
 		{"name": "Mariana Estoquista", "email": "mariana.estoque@email.com", "password": "1q2w3e"},
 		{"name": "Ricardo Estoquista", "email": "ricardo.estoque@email.com", "password": "1q2w3e"},
+		{"name": "Carla Atendente", "email": "carla.atendente@email.com", "password": "1q2w3e"},
+		{"name": "Bruno Supervisor", "email": "bruno.supervisor@email.com", "password": "1q2w3e"},
+		{"name": "Daniela Financeiro", "email": "daniela.financeiro@email.com", "password": "1q2w3e"},
+		{"name": "Felipe Compras", "email": "felipe.compras@email.com", "password": "1q2w3e"},
+		{"name": "Tatiane Marketing", "email": "tatiane.marketing@email.com", "password": "1q2w3e"},
+		{"name": "Rafael Vendas", "email": "rafael.vendas@email.com", "password": "1q2w3e"},
+		{"name": "Amanda Logística", "email": "amanda.logistica@email.com", "password": "1q2w3e"},
+		{"name": "Gustavo Caixa", "email": "gustavo.caixa@email.com", "password": "1q2w3e"},
 	}
 
 	for i, data := range stockManagersData {
 		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(data["password"]), bcrypt.DefaultCost)
 		if err != nil { return err }
 
-		filial := filiais[i]
+		filial := filiais[i%len(filiais)]
 		
 		sql := `
 			INSERT INTO usuarios (nome, email, senha_hash, cargo, filial_id)
 			VALUES ($1, $2, $3, 'estoquista', $4)
-			ON CONFLICT (email) DO UPDATE SET nome = EXCLUDED.nome
+			ON CONFLICT (email) DO UPDATE SET nome = EXCLUDED.nome, filial_id = EXCLUDED.filial_id
 		`
 		_, err = dbpool.Exec(context.Background(), sql, data["name"], data["email"], string(hashedPassword), filial.ID)
 		if err != nil {
@@ -195,6 +207,14 @@ func createSellers(dbpool *pgxpool.Pool, filiais []Filial) ([]User, error) {
 		{"name": "João Vendedor", "email": "joao.vendas@email.com", "password": "1q2w3e"},
 		{"name": "Pedro Vendedor", "email": "pedro.vendas@email.com", "password": "1q2w3e"},
 		{"name": "Camila Vendedora", "email": "camila.vendas@email.com", "password": "1q2w3e"},
+		{"name": "João Gerente", "email": "joao.gerente@email.com", "password": "1q2w3e"},
+		{"name": "Marcos Supervisor", "email": "marcos.supervisor@email.com", "password": "1q2w3e"},
+		{"name": "Fernanda Caixa", "email": "fernanda.caixa@email.com", "password": "1q2w3e"},
+		{"name": "Ricardo Estoquista", "email": "ricardo.estoque@email.com", "password": "1q2w3e"},
+		{"name": "Patrícia Compras", "email": "patricia.compras@email.com", "password": "1q2w3e"},
+		{"name": "Lucas Financeiro", "email": "lucas.financeiro@email.com", "password": "1q2w3e"},
+		{"name": "Beatriz Marketing", "email": "beatriz.marketing@email.com", "password": "1q2w3e"},
+		{"name": "André Logística", "email": "andre.logistica@email.com", "password": "1q2w3e"},
 	}
 
 	var createdSellers []User
@@ -220,6 +240,7 @@ func createSellers(dbpool *pgxpool.Pool, filiais []Filial) ([]User, error) {
 	return createdSellers, nil
 }
 
+// ATUALIZADO: A lógica agora distribui as vendas de forma mais aleatória.
 func createSales(dbpool *pgxpool.Pool, vendedores []User) error {
 	var stockItems []StockItem
 	sqlItems := `SELECT p.id, ef.filial_id, ef.quantidade, p.preco_sugerido FROM estoque_filiais ef JOIN produtos p ON p.id = ef.produto_id WHERE ef.quantidade > 10`
@@ -237,13 +258,21 @@ func createSales(dbpool *pgxpool.Pool, vendedores []User) error {
 	itemsToSell := stockItems[:numItemsToSell]
 
 	for _, item := range itemsToSell {
-		vendedorDaFilial := vendedores[0]
+		// Filtra os vendedores que pertencem à filial do item
+		vendedoresDaFilial := []User{}
 		for _, v := range vendedores {
 			if v.FilialID == item.FilialID {
-				vendedorDaFilial = v
-				break
+				vendedoresDaFilial = append(vendedoresDaFilial, v)
 			}
 		}
+		
+		// Se não houver vendedores para a filial, pula para o próximo item
+		if len(vendedoresDaFilial) == 0 {
+			continue
+		}
+		
+		// Escolhe um vendedor aleatório da filial correta
+		vendedorAleatorio := vendedoresDaFilial[rand.Intn(len(vendedoresDaFilial))]
 
 		quantidadeVenda := rand.Intn(item.Quantidade/3) + 1
 		totalVenda := float64(quantidadeVenda) * item.PrecoSugerido
@@ -253,7 +282,7 @@ func createSales(dbpool *pgxpool.Pool, vendedores []User) error {
 
 		var vendaID uuid.UUID
 		sqlVenda := `INSERT INTO vendas (usuario_id, filial_id, total_venda) VALUES ($1, $2, $3) RETURNING id`
-		err = tx.QueryRow(context.Background(), sqlVenda, vendedorDaFilial.ID, item.FilialID, totalVenda).Scan(&vendaID)
+		err = tx.QueryRow(context.Background(), sqlVenda, vendedorAleatorio.ID, item.FilialID, totalVenda).Scan(&vendaID)
 		if err != nil { tx.Rollback(context.Background()); continue }
 
 		sqlItemVenda := `INSERT INTO itens_venda (venda_id, produto_id, quantidade, preco_unitario) VALUES ($1, $2, $3, $4)`
@@ -331,7 +360,6 @@ func createOrGetFiliais(dbpool *pgxpool.Pool) ([]Filial, error) {
 	return filiais, nil
 }
 
-// ATUALIZADO: Gera produtos com a nova estrutura de preços.
 func generateProdutos(count int) []Produto {
 	produtos := make([]Produto, count)
 	for i := 0; i < count; i++ {
@@ -351,12 +379,11 @@ func generateProdutos(count int) []Produto {
 			custo = 100.0 + rand.Float64()*2500.0
 		}
 
-		lucro := 15.0 + rand.Float64()*35.0 // Lucro entre 15% e 50%
-		impostoEst := 7.0 + rand.Float64()*11.0 // Imposto estadual entre 7% e 18%
-		impostoFed := 5.0 + rand.Float64()*7.0  // Imposto federal entre 5% e 12%
+		lucro := 15.0 + rand.Float64()*35.0
+		impostoEst := 7.0 + rand.Float64()*11.0
+		impostoFed := 5.0 + rand.Float64()*7.0
 
 		precoSugerido := custo * (1 + lucro/100 + impostoEst/100 + impostoFed/100)
-
 		cnaeAleatorio := rand.Intn(10000000)
 		
 		produtos[i] = Produto{
@@ -364,7 +391,7 @@ func generateProdutos(count int) []Produto {
 			Nome:            nomeCompleto,
 			Descricao:       fmt.Sprintf("Descrição para %s.", nomeCompleto),
 			CodigoBarras:    strconv.FormatInt(time.Now().UnixNano()+int64(i), 10),
-			CodigoCNAE:      strconv.Itoa(cnaeAleatorio), // NOVO			
+			CodigoCNAE:      strconv.Itoa(cnaeAleatorio),
 			PrecoCusto:      custo,
 			PercentualLucro: lucro,
 			ImpostoEstadual: impostoEst,
@@ -375,7 +402,6 @@ func generateProdutos(count int) []Produto {
 	return produtos
 }
 
-// ATUALIZADO: Insere produtos com os novos campos de preço.
 func insertProdutos(dbpool *pgxpool.Pool, produtos []Produto) error {
 	sqlStatement := `
 		INSERT INTO produtos (id, nome, descricao, codigo_barras, codigo_cnae, preco_custo, percentual_lucro, imposto_estadual, imposto_federal, preco_sugerido) 
@@ -395,7 +421,7 @@ func insertProdutos(dbpool *pgxpool.Pool, produtos []Produto) error {
 			defer wg.Done()
 			for produto := range jobs {
 				_, err := dbpool.Exec(context.Background(), sqlStatement, 
-					produto.ID, produto.Nome, produto.Descricao, produto.CodigoBarras, produto.CodigoCNAE,  
+					produto.ID, produto.Nome, produto.Descricao, produto.CodigoBarras, produto.CodigoCNAE,
 					produto.PrecoCusto, produto.PercentualLucro, produto.ImpostoEstadual, produto.ImpostoFederal, produto.PrecoSugerido)
 				if err != nil {
 					log.Printf("Aviso: Falha ao inserir produto %s: %v", produto.Nome, err)
@@ -439,9 +465,11 @@ func populateEstoque(dbpool *pgxpool.Pool, produtos []Produto, filiais []Filial)
 }
 
 func connectToDB() *pgxpool.Pool {
-	err := godotenv.Load()
+	err := godotenv.Load("config.env")
 	if err != nil {
-		log.Println("Aviso: Ficheiro .env não encontrado. Usando variáveis de ambiente do sistema.")
+		if err := godotenv.Load(); err != nil {
+			log.Println("Aviso: Nenhum ficheiro .env ou config.env encontrado.")
+		}
 	}
 	dsn := fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=disable",
 		os.Getenv("DB_USER"),

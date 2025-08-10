@@ -120,3 +120,9 @@ type TopSeller struct {
 	VendedorNome string  `json:"vendedor_nome"`
 	TotalVendas  float64 `json:"total_vendas"`
 }
+
+type LowStockProduct struct {
+	ProdutoNome  string `json:"produto_nome"`
+	FilialNome   string `json:"filial_nome"`
+	Quantidade   int    `json:"quantidade"`
+}
