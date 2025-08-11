@@ -1,6 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
     // --- Configurações do Assistente de IA ---
-    const AI_PROVIDER = "gemini"; // voce pode usar ollama ou gemini
+    const AI_PROVIDER = "gemini"; // Mude para "ollama" para usar o seu modelo local
 
     // Configurações do Ollama (usadas apenas se AI_PROVIDER for "ollama")
     const OLLAMA_URL = "http://localhost:11434/api/generate";
@@ -13,7 +13,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const chatForm = document.getElementById('chat-form');
     const chatInput = document.getElementById('chat-input');
     const chatMessages = document.getElementById('chat-messages');
+    const userRole = window.USER_ROLE || '';
 
+    // --- TROUBLESHOOTING: Exibe o cargo do utilizador no console ---
+    console.log(`[Chat IA] Cargo do utilizador detetado: ${userRole || 'Nenhum (convidado)'}`);
+    // --- Fim do Troubleshooting ---
+    
     let chatHistory = [];
 
     if (!chatIcon) return;
@@ -98,6 +103,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 url += `&filial=${encodeURIComponent(filial)}`;
             }
             return await fetch(url).then(res => res.json());
+        },
+        async getTopBillingBranch(period) {
+            return await fetch(`/api/sales/topbilling?period=${period}`).then(res => res.json());
+        },
+        async getSalesSummaryByBranch(period, branch) {
+            return await fetch(`/api/sales/branchsummary?period=${period}&branch=${encodeURIComponent(branch)}`).then(res => res.json());
+        },
+        async getTopSellerByPeriod(period) {
+            return await fetch(`/api/sales/topsellers?period=${period}`).then(res => res.json());
         }
     };
 
@@ -116,9 +130,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Lógica para o Gemini (com Tool Calling via Proxy) ---
 
     async function getGeminiResponse() {
-        const geminiTools = [{
+        let geminiTools = [{
             functionDeclarations: [
-                { name: "getSalesSummary", description: "Obtém um resumo de vendas por filial." },
+                { name: "getSalesSummary", description: "Obtém um resumo geral de vendas por filial." },
                 {
                     name: "filterProducts",
                     description: "Filtra produtos por categoria e preço mínimo.",
@@ -134,7 +148,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 { name: "getTopSellers", description: "Obtém o ranking dos 3 melhores vendedores do mês atual." },
                 {
                     name: "getLowStockProducts",
-                    description: "Obtém uma lista de produtos com o stock mais baixo. Pode ser filtrado por filial.",
+                    description: "Obtém uma lista de produtos com o stock mais baixo.",
                     parameters: {
                         type: "OBJECT",
                         properties: {
@@ -146,6 +160,45 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             ]
         }];
+        
+        if (userRole === 'admin' || userRole === 'vendedor') {
+            geminiTools[0].functionDeclarations.push(
+                {
+                    name: "getTopBillingBranch",
+                    description: "Encontra a filial com o maior faturamento num determinado período.",
+                    parameters: {
+                        type: "OBJECT",
+                        properties: {
+                            period: { type: "STRING", description: "O período a ser analisado. Valores válidos: 'day', 'week', 'month'." }
+                        },
+                        required: ["period"]
+                    }
+                },
+                {
+                    name: "getSalesSummaryByBranch",
+                    description: "Obtém um resumo detalhado de vendas para uma filial específica num período.",
+                    parameters: {
+                        type: "OBJECT",
+                        properties: {
+                            period: { type: "STRING", description: "O período a ser analisado. Valores válidos: 'day', 'week', 'month'." },
+                            branch: { type: "STRING", description: "O nome exato da filial a ser analisada." }
+                        },
+                        required: ["period", "branch"]
+                    }
+                },
+                {
+                    name: "getTopSellerByPeriod",
+                    description: "Encontra o vendedor com o maior valor total de vendas num período.",
+                    parameters: {
+                        type: "OBJECT",
+                        properties: {
+                            period: { type: "STRING", description: "O período a ser analisado. Valores válidos: 'day', 'week', 'month'." }
+                        },
+                        required: ["period"]
+                    }
+                }
+            );
+        }
 
         const payload = {
             contents: chatHistory,
@@ -154,7 +207,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 role: "system",
                 parts: [{ text: `
                     Você é um assistente de negócios. Se o utilizador perguntar "quem é você?", apresente-se e descreva as suas capacidades com base nas ferramentas que conhece.
-                    As suas ferramentas são: getSalesSummary, filterProducts, getTopSellers, e getLowStockProducts.
+                    As suas ferramentas são: getSalesSummary, filterProducts, getTopSellers, e getLowStockProducts. Se for admin ou vendedor, também tem acesso a getTopBillingBranch, getSalesSummaryByBranch, e getTopSellerByPeriod.
                 `}]
             }
         };
@@ -179,6 +232,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 toolResult = await tools.filterProducts(args.category, args.min_price);
             } else if (name === 'getLowStockProducts') {
                 toolResult = await tools.getLowStockProducts(args.limit, args.filial);
+            } else if (name === 'getTopBillingBranch' || name === 'getTopSellerByPeriod') {
+                toolResult = await tools[name](args.period);
+            } else if (name === 'getSalesSummaryByBranch') {
+                toolResult = await tools.getSalesSummaryByBranch(args.period, args.branch);
             }
             
             chatHistory.push({ role: "model", parts: [{ functionCall: { name, args } }] });
@@ -192,19 +249,36 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Lógica para o Ollama (com simulação de Tool Calling) ---
-
     async function getOllamaResponse(prompt) {
-        const systemPrompt = `
-            Você é um assistente de negócios. Você tem acesso a quatro ferramentas:
+        let systemPrompt = `
+            Você é um assistente de negócios. Você tem acesso a várias ferramentas.
+            Se o utilizador perguntar "quem é você?", apresente-se e descreva as suas capacidades com base nas ferramentas que conhece.
+            
+            Ferramentas disponíveis para todos:
             1. getSalesSummary()
             2. filterProducts(category: string, min_price: number)
             3. getTopSellers()
             4. getLowStockProducts(limit: number, filial?: string)
+        `;
 
-            Quando o utilizador pedir o ranking de vendedores, responda APENAS com o JSON: {"functionCall": "getTopSellers"}.
-            Quando o utilizador pedir um resumo de vendas, responda APENAS com o JSON: {"functionCall": "getSalesSummary"}.
-            Quando o utilizador pedir para filtrar produtos, responda APENAS com um JSON como este: {"functionCall": "filterProducts", "category": "nome_da_categoria", "min_price": valor_numerico}.
-            Quando o utilizador pedir para ver produtos com stock baixo, responda APENAS com um JSON como este: {"functionCall": "getLowStockProducts", "limit": numero_de_itens, "filial": "nome_da_filial_ou_omitido"}.
+        if (userRole === 'admin' || userRole === 'vendedor') {
+            systemPrompt += `
+            Ferramentas adicionais para si:
+            5. getTopBillingBranch(period: string) -> period pode ser 'day', 'week', 'month'.
+            6. getSalesSummaryByBranch(period: string, branch: string)
+            7. getTopSellerByPeriod(period: string)
+            `;
+        }
+
+        systemPrompt += `
+            Instruções de chamada de função:
+            - Para getSalesSummary, responda APENAS com: {"functionCall": "getSalesSummary"}
+            - Para filterProducts, responda APENAS com: {"functionCall": "filterProducts", "category": "...", "min_price": ...}
+            - Para getTopSellers, responda APENAS com: {"functionCall": "getTopSellers"}
+            - Para getLowStockProducts, responda APENAS com: {"functionCall": "getLowStockProducts", "limit": ..., "filial": "..."}
+            - Para getTopBillingBranch, responda APENAS com: {"functionCall": "getTopBillingBranch", "period": "..."}
+            - Para getSalesSummaryByBranch, responda APENAS com: {"functionCall": "getSalesSummaryByBranch", "period": "...", "branch": "..."}
+            - Para getTopSellerByPeriod, responda APENAS com: {"functionCall": "getTopSellerByPeriod", "period": "..."}
             Para qualquer outra pergunta, responda normalmente.
         `;
 
@@ -227,61 +301,105 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             const parsedResponse = JSON.parse(aiText);
-            if (parsedResponse.functionCall === 'getSalesSummary') {
-                const summaryData = await tools.getSalesSummary();
-                let dataPrompt = "Aqui estão os dados do resumo de vendas:\n";
-                summaryData.forEach(item => {
-                    dataPrompt += `- ${item.filial_nome}: R$ ${item.total_vendas.toFixed(2)}\n`;
-                });
-                dataPrompt += "\nApresente estes dados ao utilizador de forma amigável.";
-                return await getOllamaFinalAnswer(dataPrompt);
-            }
-            if (parsedResponse.functionCall === 'filterProducts') {
-                const { category, min_price } = parsedResponse;
-                const filteredProducts = await tools.filterProducts(category, min_price);
-                let dataPrompt = `Aqui está a lista de produtos da categoria '${category}' com preço superior a R$ ${min_price}:\n`;
-                if (!filteredProducts || filteredProducts.length === 0) {
-                    dataPrompt = `Não encontrei produtos da categoria '${category}' com preço superior a R$ ${min_price}.`;
-                } else {
-                    filteredProducts.forEach(item => {
-                        dataPrompt += `- ${item.Nome}: R$ ${item.PrecoSugerido.toFixed(2)}\n`;
-                    });
-                }
-                dataPrompt += "\nApresente esta lista ao utilizador.";
-                return await getOllamaFinalAnswer(dataPrompt);
-            }
-            if (parsedResponse.functionCall === 'getTopSellers') {
-                const topSellers = await tools.getTopSellers();
-                let dataPrompt = "Aqui está o ranking dos 3 melhores vendedores do mês:\n";
-                if (!topSellers || topSellers.length === 0) {
-                    dataPrompt = "Ainda não há dados de vendas suficientes para gerar um ranking este mês.";
-                } else {
-                    topSellers.forEach((seller, index) => {
-                        dataPrompt += `${index + 1}. ${seller.vendedor_nome}: R$ ${seller.total_vendas.toFixed(2)}\n`;
-                    });
-                }
-                dataPrompt += "\nApresente esta informação ao utilizador.";
-                return await getOllamaFinalAnswer(dataPrompt);
-            }
-            if (parsedResponse.functionCall === 'getLowStockProducts') {
-                const { limit, filial } = parsedResponse;
-                const lowStockProducts = await tools.getLowStockProducts(limit, filial);
-                let dataPrompt = `Aqui está a lista dos ${limit || 5} produtos com o stock mais baixo`;
-                if (filial) {
-                    dataPrompt += ` na filial '${filial}'`;
-                }
-                dataPrompt += ':\n';
+            let dataPrompt = "";
+            let toolCalled = false;
 
-                if (!lowStockProducts || lowStockProducts.length === 0) {
-                    dataPrompt = "Não encontrei produtos com stock baixo para os filtros selecionados.";
-                } else {
-                    lowStockProducts.forEach(item => {
-                        dataPrompt += `- ${item.produto_nome} (${item.filial_nome}): ${item.quantidade} unidades\n`;
+            switch (parsedResponse.functionCall) {
+                case 'getSalesSummary': {
+                    const summaryData = await tools.getSalesSummary();
+                    dataPrompt = "Aqui estão os dados do resumo de vendas:\n";
+                    summaryData.forEach(item => {
+                        dataPrompt += `- ${item.filial_nome}: R$ ${item.total_vendas.toFixed(2)}\n`;
                     });
+                    dataPrompt += "\nApresente estes dados ao utilizador de forma amigável.";
+                    toolCalled = true;
+                    break;
                 }
-                dataPrompt += "\nApresente esta informação de forma clara ao utilizador.";
+                case 'filterProducts': {
+                    const { category, min_price } = parsedResponse;
+                    const filteredProducts = await tools.filterProducts(category, min_price);
+                    dataPrompt = `Aqui está a lista de produtos da categoria '${category}' com preço superior a R$ ${min_price}:\n`;
+                    if (!filteredProducts || filteredProducts.length === 0) {
+                        dataPrompt = `Não encontrei produtos da categoria '${category}' com preço superior a R$ ${min_price}.`;
+                    } else {
+                        filteredProducts.forEach(item => {
+                            dataPrompt += `- ${item.Nome}: R$ ${item.PrecoSugerido.toFixed(2)}\n`;
+                        });
+                    }
+                    dataPrompt += "\nApresente esta lista ao utilizador.";
+                    toolCalled = true;
+                    break;
+                }
+                case 'getTopSellers': {
+                    const topSellers = await tools.getTopSellers();
+                    dataPrompt = "Aqui está o ranking dos 3 melhores vendedores do mês:\n";
+                    if (!topSellers || topSellers.length === 0) {
+                        dataPrompt = "Ainda não há dados de vendas suficientes para gerar um ranking este mês.";
+                    } else {
+                        topSellers.forEach((seller, index) => {
+                            dataPrompt += `${index + 1}. ${seller.vendedor_nome}: R$ ${seller.total_vendas.toFixed(2)}\n`;
+                        });
+                    }
+                    dataPrompt += "\nApresente esta informação ao utilizador.";
+                    toolCalled = true;
+                    break;
+                }
+                case 'getLowStockProducts': {
+                    const { limit, filial } = parsedResponse;
+                    const lowStockProducts = await tools.getLowStockProducts(limit, filial);
+                    dataPrompt = `Aqui está a lista dos ${limit || 5} produtos com o stock mais baixo`;
+                    if (filial) dataPrompt += ` na filial '${filial}'`;
+                    dataPrompt += ':\n';
+                    if (!lowStockProducts || lowStockProducts.length === 0) {
+                        dataPrompt = "Não encontrei produtos com stock baixo para os filtros selecionados.";
+                    } else {
+                        lowStockProducts.forEach(item => {
+                            dataPrompt += `- ${item.produto_nome} (${item.filial_nome}): ${item.quantidade} unidades\n`;
+                        });
+                    }
+                    dataPrompt += "\nApresente esta informação de forma clara ao utilizador.";
+                    toolCalled = true;
+                    break;
+                }
+                case 'getTopBillingBranch': {
+                    const { period } = parsedResponse;
+                    const result = await tools.getTopBillingBranch(period);
+                    if (!result) {
+                        dataPrompt = `Não há dados de vendas para o período '${period}'.`;
+                    } else {
+                        dataPrompt = `A filial com maior faturamento no período '${period}' foi '${result.filial_nome}' com um total de R$ ${result.total_faturado.toFixed(2)}.`;
+                    }
+                    toolCalled = true;
+                    break;
+                }
+                case 'getSalesSummaryByBranch': {
+                    const { period, branch } = parsedResponse;
+                    const result = await tools.getSalesSummaryByBranch(period, branch);
+                    if (!result) {
+                        dataPrompt = `Não encontrei a filial '${branch}'.`;
+                    } else {
+                        dataPrompt = `Resumo da filial '${result.filial_nome}' no período '${period}':\n- Total de Vendas: R$ ${result.total_vendas.toFixed(2)}\n- Nº de Transações: ${result.numero_transacoes}\n- Ticket Médio: R$ ${result.ticket_medio.toFixed(2)}`;
+                    }
+                    toolCalled = true;
+                    break;
+                }
+                case 'getTopSellerByPeriod': {
+                    const { period } = parsedResponse;
+                    const result = await tools.getTopSellerByPeriod(period);
+                    if (!result) {
+                        dataPrompt = `Não há dados de vendas para encontrar o melhor vendedor no período '${period}'.`;
+                    } else {
+                        dataPrompt = `O melhor vendedor no período '${period}' foi '${result.vendedor_nome}' com um total de R$ ${result.total_vendas.toFixed(2)} em vendas.`;
+                    }
+                    toolCalled = true;
+                    break;
+                }
+            }
+
+            if (toolCalled) {
                 return await getOllamaFinalAnswer(dataPrompt);
             }
+
         } catch (e) {
             return aiText;
         }

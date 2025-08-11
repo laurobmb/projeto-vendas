@@ -133,14 +133,21 @@ func main() {
 		adminRoutes.POST("/api/stock/set", h.HandleSetStock)
 	}
 
+	salesApiRoutes := router.Group("/api/sales")
+	salesApiRoutes.Use(h.AuthRequired("admin", "vendedor"))
+	{
+		salesApiRoutes.GET("/summary", h.HandleGetSalesSummary)
+		salesApiRoutes.GET("/topsellers", h.HandleGetTopSellers)
+		salesApiRoutes.GET("/topbilling", h.HandleGetTopBillingBranch)
+		salesApiRoutes.GET("/branchsummary", h.HandleGetSalesSummaryByBranch)
+	}
+
 	apiRoutes := router.Group("/api")
 	apiRoutes.Use(h.AuthRequired("vendedor", "admin", "estoquista")) // CORREÇÃO
 	{
 		apiRoutes.GET("/products/search", h.HandleSearchProductsForSale)
 		apiRoutes.POST("/sales", h.HandleRegisterSale)
-		apiRoutes.GET("/sales/summary", h.HandleGetSalesSummary)
 		apiRoutes.GET("/products/filter", h.HandleFilterProducts)
-		apiRoutes.GET("/sales/topsellers", h.HandleGetTopSellers) // NOVA ROTA
 		apiRoutes.GET("/stock/low", h.HandleGetLowStockProducts) // NOVA ROTA
 		apiRoutes.POST("/chat", h.HandleAIChat)
 	}

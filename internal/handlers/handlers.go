@@ -823,3 +823,42 @@ func (h *Handler) HandleGetLowStockProducts(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, products)
 }
+
+
+// NOVO: Handler para a filial com maior faturamento.
+func (h *Handler) HandleGetTopBillingBranch(c *gin.Context) {
+	period := c.DefaultQuery("period", "month") // 'month', 'week', 'day'
+	result, err := h.Storage.GetTopBillingBranch(period)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Falha ao obter dados."})
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+// NOVO: Handler para o resumo de vendas por filial.
+func (h *Handler) HandleGetSalesSummaryByBranch(c *gin.Context) {
+	period := c.DefaultQuery("period", "week")
+	branchName := c.Query("branch")
+	if branchName == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "O nome da filial é obrigatório."})
+		return
+	}
+	result, err := h.Storage.GetSalesSummaryByBranch(period, branchName)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+// NOVO: Handler para o melhor vendedor.
+func (h *Handler) HandleGetTopSellerByPeriod(c *gin.Context) {
+	period := c.DefaultQuery("period", "day")
+	result, err := h.Storage.GetTopSellerByPeriod(period)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Falha ao obter dados."})
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}

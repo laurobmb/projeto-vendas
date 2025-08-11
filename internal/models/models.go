@@ -126,3 +126,16 @@ type LowStockProduct struct {
 	FilialNome   string `json:"filial_nome"`
 	Quantidade   int    `json:"quantidade"`
 }
+
+type BranchSalesSummary struct {
+	FilialNome           string  `json:"filial_nome"`
+	TotalVendas          float64 `json:"total_vendas"`
+	NumeroTransacoes     int     `json:"numero_transacoes"`
+	TicketMedio          float64 `json:"ticket_medio"`
+}
+
+// NOVO: Struct para a filial com maior faturamento.
+type TopBillingBranch struct {
+	FilialNome    string  `json:"filial_nome"`
+	TotalFaturado float64 `json:"total_faturado"`
+}

@@ -55,6 +55,10 @@ type Store interface {
 	FilterProducts(category string, minPrice float64) ([]models.Product, error)
 	GetTopSellers() ([]models.TopSeller, error)
 	GetLowStockProducts(filialNome string, limit int) ([]models.LowStockProduct, error)
+	GetTopBillingBranch(period string) (*models.TopBillingBranch, error)
+	GetSalesSummaryByBranch(period string, branchName string) (*models.BranchSalesSummary, error)
+	GetTopSellerByPeriod(period string) (*models.TopSeller, error)
+
 
 }
 
@@ -686,4 +690,70 @@ func (s *Storage) GetLowStockProducts(filialNome string, limit int) ([]models.Lo
 		products = append(products, p)
 	}
 	return products, nil
+}
+
+func (s *Storage) GetTopBillingBranch(period string) (*models.TopBillingBranch, error) {
+	var result models.TopBillingBranch
+	sql := `
+		SELECT f.nome, SUM(v.total_venda) as total
+		FROM vendas v
+		JOIN filiais f ON v.filial_id = f.id
+		WHERE v.data_venda >= date_trunc($1, CURRENT_DATE)
+		GROUP BY f.nome
+		ORDER BY total DESC
+		LIMIT 1;
+	`
+	err := s.Dbpool.QueryRow(context.Background(), sql, period).Scan(&result.FilialNome, &result.TotalFaturado)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil // Retorna nil se não houver vendas no período
+		}
+		return nil, err
+	}
+	return &result, nil
+}
+
+// NOVO: Obtém um resumo de vendas para uma filial específica num período.
+func (s *Storage) GetSalesSummaryByBranch(period string, branchName string) (*models.BranchSalesSummary, error) {
+	var result models.BranchSalesSummary
+	sql := `
+		SELECT f.nome, COALESCE(SUM(v.total_venda), 0), COUNT(v.id)
+		FROM filiais f
+		LEFT JOIN vendas v ON f.id = v.filial_id AND v.data_venda >= date_trunc($2, CURRENT_DATE)
+		WHERE f.nome ILIKE $1
+		GROUP BY f.nome;
+	`
+	err := s.Dbpool.QueryRow(context.Background(), sql, branchName, period).Scan(&result.FilialNome, &result.TotalVendas, &result.NumeroTransacoes)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("filial '%s' não encontrada", branchName)
+		}
+		return nil, err
+	}
+	if result.NumeroTransacoes > 0 {
+		result.TicketMedio = result.TotalVendas / float64(result.NumeroTransacoes)
+	}
+	return &result, nil
+}
+
+// NOVO: Obtém o melhor vendedor num determinado período.
+func (s *Storage) GetTopSellerByPeriod(period string) (*models.TopSeller, error) {
+	var seller models.TopSeller
+	sql := `
+		SELECT u.nome, SUM(v.total_venda) as total
+		FROM vendas v
+		JOIN usuarios u ON v.usuario_id = u.id
+		WHERE v.data_venda >= date_trunc($1, CURRENT_DATE) AND u.cargo = 'vendedor'
+		GROUP BY u.nome
+		ORDER BY total DESC
+		LIMIT 1;
+	`
+	err := s.Dbpool.QueryRow(context.Background(), sql, period).Scan(&seller.VendedorNome, &seller.TotalVendas)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil // Retorna nil se não houver vendas no período
+		}
+		return nil, err
+	}
+	return &seller, nil
 }

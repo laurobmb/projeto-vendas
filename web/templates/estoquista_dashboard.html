@@ -132,5 +132,7 @@
     {{ template "_chat_widget.html" . }}
     <script src="/static/js/chat.js"></script>    
 
+    <script>window.USER_ROLE = "{{ .UserRole }}";</script>
+    
 </body>
 </html>
