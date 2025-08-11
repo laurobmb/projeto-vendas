@@ -147,11 +147,25 @@ type DailyBranchSales struct {
 	TotalVendas  float64 `json:"total_vendas"`
 }
 
-// NOVO: Struct principal que agrupa todos os dados para o dashboard de monitoramento.
+type StockComposition struct {
+	Category string  `json:"category"`
+	Value    float64 `json:"value"`
+}
+
+type FinancialKPIs struct {
+	GrossProfitMargin float64 `json:"gross_profit_margin"`
+	InventoryTurnover float64 `json:"inventory_turnover"`
+}
+
+// ATUALIZADO: A struct principal do dashboard agora inclui os novos KPIs financeiros.
 type MonitoringDashboardData struct {
 	SalesByBranch     []DailyBranchSales
+	TopSellers        []TopSeller
+	StockComposition  []StockComposition
 	LowStockAlerts    []LowStockProduct
 	TotalRevenue      float64
 	TotalTransactions int
 	AverageTicket     float64
+	TotalStockValue   float64
+	FinancialKPIs     FinancialKPIs // NOVO
 }

@@ -240,7 +240,6 @@ func createSellers(dbpool *pgxpool.Pool, filiais []Filial) ([]User, error) {
 	return createdSellers, nil
 }
 
-// ATUALIZADO: A lógica agora distribui as vendas de forma mais aleatória.
 func createSales(dbpool *pgxpool.Pool, vendedores []User) error {
 	var stockItems []StockItem
 	sqlItems := `SELECT p.id, ef.filial_id, ef.quantidade, p.preco_sugerido FROM estoque_filiais ef JOIN produtos p ON p.id = ef.produto_id WHERE ef.quantidade > 10`
@@ -258,7 +257,6 @@ func createSales(dbpool *pgxpool.Pool, vendedores []User) error {
 	itemsToSell := stockItems[:numItemsToSell]
 
 	for _, item := range itemsToSell {
-		// Filtra os vendedores que pertencem à filial do item
 		vendedoresDaFilial := []User{}
 		for _, v := range vendedores {
 			if v.FilialID == item.FilialID {
@@ -266,23 +264,26 @@ func createSales(dbpool *pgxpool.Pool, vendedores []User) error {
 			}
 		}
 		
-		// Se não houver vendedores para a filial, pula para o próximo item
 		if len(vendedoresDaFilial) == 0 {
 			continue
 		}
 		
-		// Escolhe um vendedor aleatório da filial correta
 		vendedorAleatorio := vendedoresDaFilial[rand.Intn(len(vendedoresDaFilial))]
 
 		quantidadeVenda := rand.Intn(item.Quantidade/3) + 1
 		totalVenda := float64(quantidadeVenda) * item.PrecoSugerido
 
+		// ATUALIZADO: Gera uma data de venda aleatória nos últimos 90 dias.
+		diasAtras := rand.Intn(90)
+		dataVenda := time.Now().AddDate(0, 0, -diasAtras)
+
 		tx, err := dbpool.Begin(context.Background())
 		if err != nil { continue }
 
 		var vendaID uuid.UUID
-		sqlVenda := `INSERT INTO vendas (usuario_id, filial_id, total_venda) VALUES ($1, $2, $3) RETURNING id`
-		err = tx.QueryRow(context.Background(), sqlVenda, vendedorAleatorio.ID, item.FilialID, totalVenda).Scan(&vendaID)
+		// ATUALIZADO: Insere a data da venda na query.
+		sqlVenda := `INSERT INTO vendas (usuario_id, filial_id, total_venda, data_venda) VALUES ($1, $2, $3, $4) RETURNING id`
+		err = tx.QueryRow(context.Background(), sqlVenda, vendedorAleatorio.ID, item.FilialID, totalVenda, dataVenda).Scan(&vendaID)
 		if err != nil { tx.Rollback(context.Background()); continue }
 
 		sqlItemVenda := `INSERT INTO itens_venda (venda_id, produto_id, quantidade, preco_unitario) VALUES ($1, $2, $3, $4)`

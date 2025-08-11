@@ -810,7 +810,14 @@ func (h *Handler) HandleAIChat(c *gin.Context) {
 }
 
 func (h *Handler) HandleGetTopSellers(c *gin.Context) {
-	sellers, err := h.Storage.GetTopSellers()
+	// CORREÇÃO: Lê o parâmetro 'period' do URL e passa-o para a função do storage.
+	periodStr := c.DefaultQuery("period", "30") // Padrão de 30 dias se não for especificado
+	period, err := strconv.Atoi(periodStr)
+	if err != nil || period <= 0 {
+		period = 30 // Fallback para o padrão em caso de erro
+	}
+
+	sellers, err := h.Storage.GetTopSellers(period)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Falha ao obter o ranking de vendedores."})
 		return
@@ -875,27 +882,23 @@ func (h *Handler) HandleGetTopSellerByPeriod(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
-// NOVO: Handler para a nova página de monitoramento.
+// ATUALIZADO: O handler agora busca todos os dados para o dashboard completo.
 func (h *Handler) ShowMonitoringDashboard(c *gin.Context) {
 	session := sessions.Default(c)
 	
-	salesData, err := h.Storage.GetDailySalesByBranch(30) // Últimos 30 dias
-	if err != nil {
-		c.HTML(http.StatusInternalServerError, "error.html", gin.H{"error": "Falha ao carregar dados de vendas."})
-		return
+	periodStr := c.DefaultQuery("period", "30")
+	period, _ := strconv.Atoi(periodStr)
+	if period == 0 {
+		period = 30
 	}
 
-	lowStock, err := h.Storage.GetLowStockProducts("", 10) // 10 produtos com stock mais baixo de todas as filiais
-	if err != nil {
-		c.HTML(http.StatusInternalServerError, "error.html", gin.H{"error": "Falha ao carregar alertas de stock."})
-		return
-	}
-	
-	totalRevenue, totalTransactions, err := h.Storage.GetDashboardMetrics(30)
-	if err != nil {
-		c.HTML(http.StatusInternalServerError, "error.html", gin.H{"error": "Falha ao carregar métricas."})
-		return
-	}
+	salesData, _ := h.Storage.GetDailySalesByBranch(period)
+	lowStock, _ := h.Storage.GetLowStockProducts("", 10)
+	totalRevenue, totalTransactions, _ := h.Storage.GetDashboardMetrics(period)
+	topSellers, _ := h.Storage.GetTopSellers(period)
+	totalStockValue, _ := h.Storage.GetTotalStockValue()
+	stockComposition, _ := h.Storage.GetStockComposition()
+	financialKPIs, _ := h.Storage.GetFinancialKPIs(period) // NOVO
 
 	var averageTicket float64
 	if totalTransactions > 0 {
@@ -904,10 +907,14 @@ func (h *Handler) ShowMonitoringDashboard(c *gin.Context) {
 
 	dashboardData := models.MonitoringDashboardData{
 		SalesByBranch:     salesData,
+		TopSellers:        topSellers,
+		StockComposition:  stockComposition,
 		LowStockAlerts:    lowStock,
 		TotalRevenue:      totalRevenue,
 		TotalTransactions: totalTransactions,
 		AverageTicket:     averageTicket,
+		TotalStockValue:   totalStockValue,
+		FinancialKPIs:     financialKPIs, // NOVO
 	}
 
 	data := getFlashes(c)
@@ -916,6 +923,7 @@ func (h *Handler) ShowMonitoringDashboard(c *gin.Context) {
 	data["UserName"] = session.Get("userName")
 	data["ActivePage"] = "monitoring"
 	data["DashboardData"] = dashboardData
+	data["CurrentPeriod"] = period
 	
 	c.HTML(http.StatusOK, "monitoring_dashboard.html", data)
 }

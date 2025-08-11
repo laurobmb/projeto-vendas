@@ -53,14 +53,17 @@ type Store interface {
 	AdjustStockQuantity(productID, filialID string, quantityToRemove int) error
 	GetSalesSummary() ([]models.SalesSummary, error)
 	FilterProducts(category string, minPrice float64) ([]models.Product, error)
-	GetTopSellers() ([]models.TopSeller, error)
 	GetLowStockProducts(filialNome string, limit int) ([]models.LowStockProduct, error)
 	GetTopBillingBranch(period string) (*models.TopBillingBranch, error)
 	GetSalesSummaryByBranch(period string, branchName string) (*models.BranchSalesSummary, error)
 	GetTopSellerByPeriod(period string) (*models.TopSeller, error)
 	GetDailySalesByBranch(days int) ([]models.DailyBranchSales, error)
 	GetDashboardMetrics(days int) (float64, int, error)
+	GetFinancialKPIs(days int) (models.FinancialKPIs, error)
 
+	GetTopSellers(days int) ([]models.TopSeller, error)
+	GetTotalStockValue() (float64, error)
+	GetStockComposition() ([]models.StockComposition, error)
 
 }
 
@@ -631,18 +634,18 @@ func (s *Storage) FilterProducts(category string, minPrice float64) ([]models.Pr
     return products, nil
 }
 
-func (s *Storage) GetTopSellers() ([]models.TopSeller, error) {
+func (s *Storage) GetTopSellers(days int) ([]models.TopSeller, error) {
 	var sellers []models.TopSeller
 	sql := `
 		SELECT u.nome, SUM(v.total_venda) as total
 		FROM vendas v
 		JOIN usuarios u ON v.usuario_id = u.id
-		WHERE v.data_venda >= date_trunc('month', CURRENT_DATE) AND u.cargo = 'vendedor'
+		WHERE v.data_venda >= CURRENT_DATE - MAKE_INTERVAL(days => $1) AND u.cargo = 'vendedor'
 		GROUP BY u.nome
 		ORDER BY total DESC
 		LIMIT 3
 	`
-	rows, err := s.Dbpool.Query(context.Background(), sql)
+	rows, err := s.Dbpool.Query(context.Background(), sql, days)
 	if err != nil {
 		return nil, err
 	}
@@ -657,6 +660,7 @@ func (s *Storage) GetTopSellers() ([]models.TopSeller, error) {
 	}
 	return sellers, nil
 }
+
 
 func (s *Storage) GetLowStockProducts(filialNome string, limit int) ([]models.LowStockProduct, error) {
 	var products []models.LowStockProduct
@@ -802,3 +806,99 @@ func (s *Storage) GetDashboardMetrics(days int) (float64, int, error) {
 	err := s.Dbpool.QueryRow(context.Background(), sql, days).Scan(&totalRevenue, &totalTransactions)
 	return totalRevenue, totalTransactions, err
 }
+
+
+// NOVO: Calcula o valor total de todos os produtos em stock.
+func (s *Storage) GetTotalStockValue() (float64, error) {
+	var totalValue float64
+	sql := `
+		SELECT COALESCE(SUM(p.preco_custo * ef.quantidade), 0) 
+		FROM estoque_filiais ef
+		JOIN produtos p ON ef.produto_id = p.id;
+	`
+	err := s.Dbpool.QueryRow(context.Background(), sql).Scan(&totalValue)
+	return totalValue, err
+}
+
+// ATUALIZADO: A query agora categoriza os produtos corretamente com base nos seus nomes.
+func (s *Storage) GetStockComposition() ([]models.StockComposition, error) {
+	var composition []models.StockComposition
+	sql := `
+		SELECT 
+			CASE 
+				WHEN p.nome ILIKE ANY(ARRAY['%Arroz%', '%Feijão%', '%Macarrão%', '%Óleo de Soja%', '%Açúcar%', '%Café%', '%Leite em Pó%', '%Farinha de Trigo%', '%Biscoito%', '%Molho de Tomate%', '%Sal%', '%Aveia%', '%Achocolatado em Pó%', '%Milho Verde%', '%Ervilha%', '%Sardinha em Lata%', '%Atum em Lata%', '%Margarina%', '%Manteiga%', '%Gelatina%', '%Fermento em Pó%', '%Batata Chips%', '%Pipoca de Micro-ondas%']) THEN 'Alimentos'
+				WHEN p.nome ILIKE ANY(ARRAY['%Sabão em Pó%', '%Detergente%', '%Água Sanitária%', '%Desinfetante%', '%Amaciante de Roupas%', '%Limpador Multiuso%', '%Saponáceo%', '%Removedor de Gordura%', '%Esponja de Aço%', '%Esponja Multiuso%', '%Pano de Chão%', '%Rodo%', '%Vassoura%']) THEN 'Limpeza'
+				WHEN p.nome ILIKE ANY(ARRAY['%Sabonete%', '%Shampoo%', '%Condicionador%', '%Creme Dental%', '%Papel Higiénico%', '%Desodorante%', '%Escova de Dentes%', '%Fio Dental%', '%Lenço Umedecido%', '%Álcool em Gel%', '%Absorvente Feminino%', '%Aparelho de Barbear%']) THEN 'Higiene'
+				WHEN p.nome ILIKE ANY(ARRAY['%Smartphone%', '%Notebook%', '%TV LED 4K%', '%Fone de Ouvido Bluetooth%', '%Smartwatch%', '%Carregador Portátil%', '%Mouse Sem Fio%', '%Teclado Sem Fio%', '%Caixa de Som Bluetooth%', '%Tablet%', '%Roteador Wi-Fi%', '%Câmera de Segurança%', '%Console de Videogame%']) THEN 'Eletrónicos'
+				WHEN p.nome ILIKE ANY(ARRAY['%Liquidificador%', '%Batedeira%', '%Fritadeira Elétrica%', '%Micro-ondas%', '%Geladeira%', '%Fogão%', '%Aspirador de Pó%', '%Ventilador%', '%Ar-Condicionado%', '%Cafeteira Elétrica%', '%Sanduicheira%', '%Chaleira Elétrica%', '%Torradeira%']) THEN 'Eletrodomésticos'
+				WHEN p.nome ILIKE ANY(ARRAY['%Água Mineral%', '%Refrigerante%', '%Suco de Caixinha%', '%Suco Concentrado%', '%Energético%', '%Cerveja%', '%Vinho%', '%Whisky%', '%Vodka%', '%Água de Coco%', '%Chá Gelado%', '%Café Pronto%', '%Leite%']) THEN 'Bebidas'
+				WHEN p.nome ILIKE ANY(ARRAY['%Baldes%', '%Vasilhas Plásticas%', '%Panelas%', '%Copos de Vidro%', '%Pratos%', '%Talheres%', '%Travessas%', '%Assadeiras%', '%Jarras%', '%Potes Herméticos%', '%Cadeiras Plásticas%', '%Mesa Dobrável%']) THEN 'Bazar'
+				WHEN p.nome ILIKE ANY(ARRAY['%Chave de Fenda%', '%Martelo%', '%Alicate%', '%Trena%', '%Parafusadeira%', '%Furadeira%', '%Chave Inglesa%', '%Serrote%', '%Nível%', '%Caixa de Ferramentas%']) THEN 'Ferramentas'
+				ELSE 'Outros'
+			END as categoria,
+			SUM(p.preco_custo * ef.quantidade) as valor
+		FROM produtos p
+		JOIN estoque_filiais ef ON p.id = ef.produto_id
+		GROUP BY categoria
+		ORDER BY valor DESC;
+	`
+	rows, err := s.Dbpool.Query(context.Background(), sql)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var item models.StockComposition
+		if err := rows.Scan(&item.Category, &item.Value); err != nil {
+			return nil, err
+		}
+		composition = append(composition, item)
+	}
+	return composition, nil
+}
+
+
+
+// NOVO: Calcula a Margem de Lucro Bruta e o Giro de Estoque.
+func (s *Storage) GetFinancialKPIs(days int) (models.FinancialKPIs, error) {
+	var kpis models.FinancialKPIs
+	var totalRevenue, costOfGoodsSold, avgInventoryValue float64
+
+	// 1. Calcula o Faturamento Total e o Custo dos Produtos Vendidos (COGS)
+	sqlCogs := `
+		SELECT 
+			COALESCE(SUM(iv.preco_unitario * iv.quantidade), 0) as revenue,
+			COALESCE(SUM(p.preco_custo * iv.quantidade), 0) as cogs
+		FROM itens_venda iv
+		JOIN vendas v ON iv.venda_id = v.id
+		JOIN produtos p ON iv.produto_id = p.id
+		WHERE v.data_venda >= CURRENT_DATE - MAKE_INTERVAL(days => $1);
+	`
+	err := s.Dbpool.QueryRow(context.Background(), sqlCogs, days).Scan(&totalRevenue, &costOfGoodsSold)
+	if err != nil {
+		return kpis, fmt.Errorf("falha ao calcular COGS e faturamento: %w", err)
+	}
+
+	// 2. Calcula o Valor Médio do Estoque (simplificado como o valor atual)
+	sqlAvgInventory := `
+		SELECT COALESCE(SUM(p.preco_custo * ef.quantidade), 0)
+		FROM estoque_filiais ef
+		JOIN produtos p ON ef.produto_id = p.id;
+	`
+	err = s.Dbpool.QueryRow(context.Background(), sqlAvgInventory).Scan(&avgInventoryValue)
+	if err != nil {
+		return kpis, fmt.Errorf("falha ao calcular valor do estoque: %w", err)
+	}
+
+	// 3. Calcula os KPIs
+	if totalRevenue > 0 {
+		kpis.GrossProfitMargin = (totalRevenue - costOfGoodsSold) / totalRevenue * 100
+	}
+	if avgInventoryValue > 0 {
+		kpis.InventoryTurnover = costOfGoodsSold / avgInventoryValue
+	}
+
+	return kpis, nil
+}
+
