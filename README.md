@@ -44,19 +44,16 @@ Fluxo de comunicação:
    IA responde com:  
    ```json
    {"functionCall": "getTopBillingBranch", "period": "month"}
-````
 
 2. **Resposta**:
    O `chat.js` executa a função, envia os dados reais para a IA e recebe a resposta final formatada.
 
----
 
 ## Implementação com Google Gemini vs. Ollama
 
 * **Google Gemini**: Suporte nativo a "Tool Calling".
 * **Ollama (Llama 3)**: Implementado via *Prompt Engineering*, simulando o retorno JSON.
 
----
 
 ## Relatório Visual dos Testes de Frontend
 
@@ -104,7 +101,6 @@ Fluxo de comunicação:
 </tbody>
 </table>
 
----
 
 ## Tecnologias Utilizadas
 
@@ -118,19 +114,16 @@ Fluxo de comunicação:
   * Backend: Pacote `testing` nativo do Go.
   * Frontend (E2E): Python com Selenium.
 
----
 
 ## Configuração e Execução
 
 *(Esta secção permanece igual)*
 
----
 
 ## Licença
 
 Este projeto está licenciado sob a Licença MIT.
 
-```
 Licença MIT
 Copyright (c) 2025 Seu Nome ou Nome da Empresa
 
