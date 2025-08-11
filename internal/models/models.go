@@ -139,3 +139,19 @@ type TopBillingBranch struct {
 	FilialNome    string  `json:"filial_nome"`
 	TotalFaturado float64 `json:"total_faturado"`
 }
+
+// NOVO: Struct para os dados de vendas diárias por filial para o gráfico.
+type DailyBranchSales struct {
+	Date         string  `json:"date"`
+	FilialNome   string  `json:"filial_nome"`
+	TotalVendas  float64 `json:"total_vendas"`
+}
+
+// NOVO: Struct principal que agrupa todos os dados para o dashboard de monitoramento.
+type MonitoringDashboardData struct {
+	SalesByBranch     []DailyBranchSales
+	LowStockAlerts    []LowStockProduct
+	TotalRevenue      float64
+	TotalTransactions int
+	AverageTicket     float64
+}

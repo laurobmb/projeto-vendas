@@ -114,6 +114,7 @@ func main() {
 	adminRoutes.Use(h.AuthRequired("admin")) // CORREÇÃO
 	{
 		adminRoutes.GET("/dashboard", h.ShowAdminDashboard)
+		adminRoutes.GET("/monitoring", h.ShowMonitoringDashboard)
 		adminRoutes.GET("/stock", h.ShowStockManagementPage)
 		adminRoutes.GET("/sales", h.ShowSalesReportPage)
 		adminRoutes.GET("/empresa", h.ShowEmpresaPage)

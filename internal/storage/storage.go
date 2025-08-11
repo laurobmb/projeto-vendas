@@ -58,6 +58,8 @@ type Store interface {
 	GetTopBillingBranch(period string) (*models.TopBillingBranch, error)
 	GetSalesSummaryByBranch(period string, branchName string) (*models.BranchSalesSummary, error)
 	GetTopSellerByPeriod(period string) (*models.TopSeller, error)
+	GetDailySalesByBranch(days int) ([]models.DailyBranchSales, error)
+	GetDashboardMetrics(days int) (float64, int, error)
 
 
 }
@@ -756,4 +758,47 @@ func (s *Storage) GetTopSellerByPeriod(period string) (*models.TopSeller, error)
 		return nil, err
 	}
 	return &seller, nil
+}
+
+// NOVO: Obtém as vendas diárias agrupadas por filial dos últimos N dias.
+func (s *Storage) GetDailySalesByBranch(days int) ([]models.DailyBranchSales, error) {
+	var sales []models.DailyBranchSales
+	sql := `
+		SELECT 
+			TO_CHAR(v.data_venda, 'YYYY-MM-DD') as dia,
+			f.nome as filial_nome,
+			SUM(v.total_venda) as total_vendas
+		FROM vendas v
+		JOIN filiais f ON v.filial_id = f.id
+		WHERE v.data_venda >= CURRENT_DATE - MAKE_INTERVAL(days => $1)
+		GROUP BY dia, f.nome
+		ORDER BY dia, f.nome;
+	`
+	rows, err := s.Dbpool.Query(context.Background(), sql, days)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var sale models.DailyBranchSales
+		if err := rows.Scan(&sale.Date, &sale.FilialNome, &sale.TotalVendas); err != nil {
+			return nil, err
+		}
+		sales = append(sales, sale)
+	}
+	return sales, nil
+}
+
+// NOVO: Obtém as métricas gerais do dashboard (faturamento total, transações).
+func (s *Storage) GetDashboardMetrics(days int) (float64, int, error) {
+	var totalRevenue float64
+	var totalTransactions int
+	sql := `
+		SELECT COALESCE(SUM(total_venda), 0), COUNT(id)
+		FROM vendas
+		WHERE data_venda >= CURRENT_DATE - MAKE_INTERVAL(days => $1);
+	`
+	err := s.Dbpool.QueryRow(context.Background(), sql, days).Scan(&totalRevenue, &totalTransactions)
+	return totalRevenue, totalTransactions, err
 }

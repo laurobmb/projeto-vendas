@@ -862,3 +862,48 @@ func (h *Handler) HandleGetTopSellerByPeriod(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, result)
 }
+
+// NOVO: Handler para a nova página de monitoramento.
+func (h *Handler) ShowMonitoringDashboard(c *gin.Context) {
+	session := sessions.Default(c)
+	
+	salesData, err := h.Storage.GetDailySalesByBranch(30) // Últimos 30 dias
+	if err != nil {
+		c.HTML(http.StatusInternalServerError, "error.html", gin.H{"error": "Falha ao carregar dados de vendas."})
+		return
+	}
+
+	lowStock, err := h.Storage.GetLowStockProducts("", 10) // 10 produtos com stock mais baixo de todas as filiais
+	if err != nil {
+		c.HTML(http.StatusInternalServerError, "error.html", gin.H{"error": "Falha ao carregar alertas de stock."})
+		return
+	}
+	
+	totalRevenue, totalTransactions, err := h.Storage.GetDashboardMetrics(30)
+	if err != nil {
+		c.HTML(http.StatusInternalServerError, "error.html", gin.H{"error": "Falha ao carregar métricas."})
+		return
+	}
+
+	var averageTicket float64
+	if totalTransactions > 0 {
+		averageTicket = totalRevenue / float64(totalTransactions)
+	}
+
+	dashboardData := models.MonitoringDashboardData{
+		SalesByBranch:     salesData,
+		LowStockAlerts:    lowStock,
+		TotalRevenue:      totalRevenue,
+		TotalTransactions: totalTransactions,
+		AverageTicket:     averageTicket,
+	}
+
+	data := getFlashes(c)
+	data["title"] = "Dashboard de Monitoramento"
+	data["UserRole"] = session.Get("userRole")
+	data["UserName"] = session.Get("userName")
+	data["ActivePage"] = "monitoring"
+	data["DashboardData"] = dashboardData
+	
+	c.HTML(http.StatusOK, "monitoring_dashboard.html", data)
+}
