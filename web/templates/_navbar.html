@@ -4,9 +4,9 @@
         <div class="flex items-center space-x-4">
             <!-- Links para Admin -->
             {{ if eq .UserRole "admin" }}
-                <a href="/admin/dashboard" class="text-lg font-semibold hover:text-gray-300 {{ if eq .ActivePage "dashboard" }}text-blue-300{{ end }}">Painel Admin</a>
-                <span class="text-gray-500">|</span>
                 <a href="/admin/monitoring" class="text-lg font-semibold hover:text-gray-300 {{ if eq .ActivePage "monitoring" }}text-blue-300{{ end }}">Monitoramento</a>
+                <span class="text-gray-500">|</span>
+                <a href="/admin/dashboard" class="text-lg font-semibold hover:text-gray-300 {{ if eq .ActivePage "dashboard" }}text-blue-300{{ end }}">Painel Admin</a>
                 <span class="text-gray-500">|</span>
                 <a href="/admin/stock" class="text-lg font-semibold hover:text-gray-300 {{ if eq .ActivePage "stock" }}text-blue-300{{ end }}">Gestão de Stock</a>
                 <span class="text-gray-500">|</span>

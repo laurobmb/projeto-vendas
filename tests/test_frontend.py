@@ -29,7 +29,7 @@ ESTOQUISTA_EMAIL = "estoquista@teste.com"
 TEST_PASS = "senha123"
 
 # --- Variáveis de Ambiente do Banco de Dados ---
-DB_NAME = os.getenv('DB_NAME', 'wallmart_test')
+DB_NAME = os.getenv('DB_NAME', 'wallmart')
 DB_USER = os.getenv('DB_USER', 'me')
 DB_PASS = os.getenv('DB_PASS', '1q2w3e')
 DB_HOST = os.getenv('DB_HOST', 'localhost')
@@ -41,6 +41,10 @@ class VendasSystemTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Configura o ambiente uma vez antes de todos os testes."""
+        # CORREÇÃO: Calcula a raiz do projeto de forma robusta, subindo um nível a partir do diretório do script.
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        cls.project_root = os.path.dirname(current_dir)
+
         cls.photos_dir = os.path.join(os.path.dirname(__file__), "photos")
         if os.path.exists(cls.photos_dir):
             shutil.rmtree(cls.photos_dir)
@@ -93,14 +97,13 @@ class VendasSystemTest(unittest.TestCase):
             if conn:
                 conn.close()
 
-        project_root = os.path.abspath(os.path.dirname(__file__))
         env_vars = f"DB_HOST={DB_HOST} DB_PORT={DB_PORT} DB_USER={DB_USER} DB_PASS={DB_PASS} DB_NAME={DB_NAME}"
         
         logger.info("A executar data_manager para inicializar o esquema...")
-        os.system(f'cd {project_root} && {env_vars} go run ./cmd/data_manager/main.go -init')
+        os.system(f'cd {cls.project_root} && {env_vars} go run ./cmd/data_manager/main.go -init')
         
         logger.info("A executar populando_banco para adicionar dados de teste...")
-        os.system(f'cd {project_root} && {env_vars} go run ./cmd/populando_banco/main.go')
+        os.system(f'cd {cls.project_root} && {env_vars} go run ./cmd/populando_banco/main.go')
         
         time.sleep(1)
 
@@ -109,9 +112,9 @@ class VendasSystemTest(unittest.TestCase):
             logger.error("Nenhuma filial encontrada para associar aos utilizadores de teste.")
             sys.exit(1)
             
-        os.system(f'cd {project_root} && {env_vars} go run ./cmd/create_user/main.go -name="Admin Teste" -email="{ADMIN_EMAIL}" -password="{TEST_PASS}" -role="admin"')
-        os.system(f'cd {project_root} && {env_vars} go run ./cmd/create_user/main.go -name="Vendedor Teste" -email="{VENDEDOR_EMAIL}" -password="{TEST_PASS}" -role="vendedor" -filialid="{filial_id}"')
-        os.system(f'cd {project_root} && {env_vars} go run ./cmd/create_user/main.go -name="Estoquista Teste" -email="{ESTOQUISTA_EMAIL}" -password="{TEST_PASS}" -role="estoquista" -filialid="{filial_id}"')
+        os.system(f'cd {cls.project_root} && {env_vars} go run ./cmd/create_user/main.go -name="Admin Teste" -email="{ADMIN_EMAIL}" -password="{TEST_PASS}" -role="admin"')
+        os.system(f'cd {cls.project_root} && {env_vars} go run ./cmd/create_user/main.go -name="Vendedor Teste" -email="{VENDEDOR_EMAIL}" -password="{TEST_PASS}" -role="vendedor" -filialid="{filial_id}"')
+        os.system(f'cd {cls.project_root} && {env_vars} go run ./cmd/create_user/main.go -name="Estoquista Teste" -email="{ESTOQUISTA_EMAIL}" -password="{TEST_PASS}" -role="estoquista" -filialid="{filial_id}"')
         logger.info("Utilizadores de teste criados.")
 
     @classmethod
@@ -160,7 +163,7 @@ class VendasSystemTest(unittest.TestCase):
     def _take_screenshot(self, name):
         """Tira um screenshot e guarda com um nome descritivo."""
         timestamp = time.strftime("%Y%m%d-%H%M%S")
-        screenshot_path = os.path.join(self.photos_dir, f"{timestamp}_{name}.png")
+        screenshot_path = os.path.join(self.photos_dir, f"{name}.png")
         try:
             self.browser.save_screenshot(screenshot_path)
             logger.info(f"Screenshot guardado em: {screenshot_path}")

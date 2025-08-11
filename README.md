@@ -50,36 +50,36 @@ Em vez de apenas conversar, demos à IA um conjunto de "ferramentas" (funções)
 </thead>
 <tbody>
 <tr>
-<td style="padding: 10px;"><img src="photos/20250811-014901_00_tela_login_preenchida.png" alt="Tela de login preenchida" width="100%"></td>
-<td style="padding: 10px;"><img src="photos/20250811-014901_01_admin_dashboard.png" alt="Dashboard do Admin" width="100%"></td>
+<td style="padding: 10px;"><img src="photos/00_tela_login_preenchida.png" alt="Tela de login preenchida" width="100%"></td>
+<td style="padding: 10px;"><img src="photos/01_admin_dashboard.png" alt="Dashboard do Admin" width="100%"></td>
 </tr>
 <tr>
-<td style="padding: 10px;"><img src="photos/20250811-014902_02_admin_modal_adicionar_user.png" alt="Modal para adicionar utilizador" width="100%"></td>
-<td style="padding: 10px;"><img src="photos/20250811-014903_03_admin_user_adicionado.png" alt="Utilizador adicionado" width="100%"></td>
+<td style="padding: 10px;"><img src="photos/02_admin_modal_adicionar_user.png" alt="Modal para adicionar utilizador" width="100%"></td>
+<td style="padding: 10px;"><img src="photos/03_admin_user_adicionado.png" alt="Utilizador adicionado" width="100%"></td>
 </tr>
 <tr>
-<td style="padding: 10px;"><img src="photos/20250811-014904_04_admin_user_removido.png" alt="Utilizador removido" width="100%"></td>
-<td style="padding: 10px;"><img src="photos/20250811-014904_05_admin_modal_adicionar_produto.png" alt="Modal para adicionar produto" width="100%"></td>
+<td style="padding: 10px;"><img src="photos/04_admin_user_removido.png" alt="Utilizador removido" width="100%"></td>
+<td style="padding: 10px;"><img src="photos/05_admin_modal_adicionar_produto.png" alt="Modal para adicionar produto" width="100%"></td>
 </tr>
 <tr>
-<td style="padding: 10px;"><img src="photos/20250811-014905_06_admin_produto_adicionado.png" alt="Produto adicionado" width="100%"></td>
-<td style="padding: 10px;"><img src="photos/20250811-014906_09_vendedor_terminal_vazio.png" alt="Terminal de vendas do vendedor (vazio)" width="100%"></td>
+<td style="padding: 10px;"><img src="photos/06_admin_produto_adicionado.png" alt="Produto adicionado" width="100%"></td>
+<td style="padding: 10px;"><img src="photos/09_vendedor_terminal_vazio.png" alt="Terminal de vendas do vendedor (vazio)" width="100%"></td>
 </tr>
 <tr>
-<td style="padding: 10px;"><img src="photos/20250811-014908_10_vendedor_item_no_carrinho.png" alt="Item adicionado ao carrinho" width="100%"></td>
-<td style="padding: 10px;"><img src="photos/20250811-014909_11_vendedor_venda_finalizada.png" alt="Venda finalizada" width="100%"></td>
+<td style="padding: 10px;"><img src="photos/10_vendedor_item_no_carrinho.png" alt="Item adicionado ao carrinho" width="100%"></td>
+<td style="padding: 10px;"><img src="photos/11_vendedor_venda_finalizada.png" alt="Venda finalizada" width="100%"></td>
 </tr>
 <tr>
-<td style="padding: 10px;"><img src="photos/20250811-014910_12_estoquista_dashboard.png" alt="Dashboard do estoquista" width="100%"></td>
-<td style="padding: 10px;"><img src="photos/20250811-014910_13_estoquista_modal_adicionar_existente.png" alt="Modal para adicionar stock a produto existente" width="100%"></td>
+<td style="padding: 10px;"><img src="photos/12_estoquista_dashboard.png" alt="Dashboard do estoquista" width="100%"></td>
+<td style="padding: 10px;"><img src="photos/13_estoquista_modal_adicionar_existente.png" alt="Modal para adicionar stock a produto existente" width="100%"></td>
 </tr>
 <tr>
-<td style="padding: 10px;"><img src="photos/20250811-014911_14_estoquista_stock_adicionado_sucesso.png" alt="Mensagem de sucesso ao adicionar stock" width="100%"></td>
-<td style="padding: 10px;"><img src="photos/20250811-014912_15_estoquista_modal_criar_novo.png" alt="Modal para criar novo produto" width="100%"></td>
+<td style="padding: 10px;"><img src="photos/14_estoquista_stock_adicionado_sucesso.png" alt="Mensagem de sucesso ao adicionar stock" width="100%"></td>
+<td style="padding: 10px;"><img src="photos/15_estoquista_modal_criar_novo.png" alt="Modal para criar novo produto" width="100%"></td>
 </tr>
 <tr>
-<td style="padding: 10px;"><img src="photos/20250811-014912_16_estoquista_novo_produto_criado_sucesso.png" alt="Mensagem de sucesso ao criar novo produto" width="100%"></td>
-<td style="padding: 10px;"><img src="photos/20250811-014913_17_admin_dashboard_monitoramento.png" alt="Dashboard de Monitoramento do Admin" width="100%"></td>
+<td style="padding: 10px;"><img src="photos/16_estoquista_novo_produto_criado_sucesso.png" alt="Mensagem de sucesso ao criar novo produto" width="100%"></td>
+<td style="padding: 10px;"><img src="photos/17_admin_dashboard_monitoramento.png" alt="Dashboard de Monitoramento do Admin" width="100%"></td>
 </tr>
 </tbody>
 </table>
