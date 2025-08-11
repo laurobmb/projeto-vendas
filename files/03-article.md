@@ -16,7 +16,7 @@ Para resolver isto, implementámos o **padrão de "proxy" no backend**:
 Este padrão oferece três vantagens cruciais:
 * **Segurança:** A chave de API nunca sai do nosso servidor.
 * **Controlo:** Podemos adicionar lógica de validação, logging ou caching no nosso backend antes de contactar a IA.
-* **Abstração:** O frontend não precisa de saber qual é o provedor de IA que estamos a usar. Como vimos, podemos alternar entre Gemini e Ollama sem alterar o fluxo principal.
+* **Abstração:** O frontend não precisa de saber qual é o provedor de IA que estamos a usar.
 
 ## A Técnica Central: "Tool Calling" (Chamada de Ferramenta)
 
@@ -27,13 +27,21 @@ O fluxo de uma interação com Tool Calling acontece em dois passos principais:
 1.  **Passo de "Pensamento":** O utilizador faz uma pergunta (ex: "quais foram as vendas do mês?"). A IA, em vez de tentar adivinhar a resposta, analisa as ferramentas que tem disponíveis e responde com uma instrução, como: "Por favor, execute a ferramenta `getSalesSummary`".
 2.  **Passo de "Resposta":** O nosso código recebe esta instrução, executa a função correspondente (chamando a nossa API em Go), obtém os dados reais e envia-os de volta para a IA, dizendo: "Aqui está o resultado da ferramenta `getSalesSummary`. Agora, por favor, formule uma resposta amigável para o utilizador."
 
-Implementámos esta técnica de duas formas diferentes, adaptadas às capacidades de cada modelo.
+## Flexibilidade de Modelos: Gemini vs. Ollama
 
-### 1. Implementação com Google Gemini (Tool Calling Nativo)
+Uma das grandes vantagens da nossa arquitetura é a flexibilidade para escolher o motor de IA. No ficheiro `chat.js`, uma única variável de configuração controla qual serviço é utilizado:
+
+```javascript
+const AI_PROVIDER = "gemini"; // Mude para "ollama" para usar o seu modelo local
+```
+
+Isto permite-nos alternar entre um modelo de nuvem poderoso como o Gemini e um modelo local como o Llama 3 (através do Ollama) sem alterar a lógica principal da aplicação.
+
+### 1\. Implementação com Google Gemini (Tool Calling Nativo)
 
 Os modelos mais recentes da Gemini têm um suporte nativo e estruturado para Tool Calling, o que torna a implementação mais elegante e fiável.
 
-* **Definição das Ferramentas:** No `chat.js`, definimos as nossas ferramentas num formato JSON que a API da Gemini entende. A `description` é a parte mais importante, pois é o que a IA usa para decidir qual ferramenta chamar.
+  * **Definição das Ferramentas:** No `chat.js`, definimos as nossas ferramentas num formato JSON que a API da Gemini entende. A `description` é a parte mais importante, pois é o que a IA usa para decidir qual ferramenta chamar.
 
     ```javascript
     const geminiTools = [{
@@ -42,16 +50,12 @@ Os modelos mais recentes da Gemini têm um suporte nativo e estruturado para Too
                 name: "getTopSellers",
                 description: "Obtém o ranking dos 3 melhores vendedores do mês atual com base no valor total de vendas."
             },
-            {
-                name: "filterProducts",
-                description: "Filtra produtos por categoria e preço mínimo.",
-                parameters: { /* ... */ }
-            }
+            // ... outras ferramentas
         ]
     }];
     ```
 
-* **Interpretação da Resposta:** A resposta da API da Gemini vem com um campo `functionCall` bem definido. O nosso código simplesmente verifica se este campo existe e, se existir, executa a função correspondente.
+  * **Interpretação da Resposta:** A resposta da API da Gemini vem com um campo `functionCall` bem definido. O nosso código simplesmente verifica se este campo existe e, se existir, executa a função correspondente.
 
     ```javascript
     const part = result.candidates[0].content.parts[0];
@@ -61,22 +65,21 @@ Os modelos mais recentes da Gemini têm um suporte nativo e estruturado para Too
     }
     ```
 
-### 2. Implementação com Ollama (Tool Calling Simulado)
+### 2\. Implementação com Ollama (Tool Calling Simulado)
 
-Uma das grandes vantagens da nossa arquitetura é a flexibilidade para usar modelos de IA que correm localmente através de ferramentas como o **Ollama**. Isto oferece benefícios significativos em termos de privacidade de dados, custos e personalização.
+Usar modelos que correm localmente através de ferramentas como o **Ollama** oferece benefícios significativos em termos de privacidade de dados e custos. Ao executar um comando como `ollama run llama3`, o Ollama expõe uma API REST no endereço `http://localhost:11434`.
 
-Ao executar um comando como `ollama run llama3`, o Ollama não só carrega o modelo, como também expõe uma API REST no endereço `http://localhost:11434`, que podemos usar da mesma forma que usamos a API da Gemini.
+Como modelos open-source não têm um suporte nativo para Tool Calling, nós **simulamos** este comportamento através de **Prompt Engineering**.
 
-Como modelos open-source como o `llama3` não têm um suporte nativo para Tool Calling, nós **simulamos** este comportamento através de **Prompt Engineering**.
-
-* **O "Prompt Mágico":** No `chat.js`, criámos um `systemPrompt` muito específico que instrui o modelo a comportar-se como a API da Gemini. A instrução chave é:
+  * **O "Prompt Mágico":** No `chat.js`, criámos um `systemPrompt` muito específico que instrui o modelo a comportar-se como a API da Gemini. A instrução chave é:
 
     ```
     Quando o utilizador pedir o ranking de vendedores, responda APENAS com o JSON: {"functionCall": "getTopSellers"}.
     ```
-    Ao adicionar `format: "json"` ao pedido para o Ollama, aumentamos a probabilidade de o modelo seguir a instrução à risca e devolver um JSON válido.
 
-* **Interpretação da Resposta:** Como a resposta do Ollama é apenas texto, o nosso código precisa de tentar interpretá-la como um JSON.
+    Ao adicionar `format: "json"` ao pedido para o Ollama, aumentamos a probabilidade de o modelo seguir a instrução à risca.
+
+  * **Interpretação da Resposta:** Como a resposta do Ollama é apenas texto, o nosso código precisa de tentar interpretá-la como um JSON.
 
     ```javascript
     const aiText = result.response.trim();
@@ -91,15 +94,17 @@ Como modelos open-source como o `llama3` não têm um suporte nativo para Tool C
     }
     ```
 
-Embora esta abordagem seja menos robusta que a nativa, ela permite-nos usar modelos locais e open-source com as mesmas "ferramentas" que criámos no nosso backend, tornando a nossa arquitetura extremamente flexível.
-
 ## Conclusão
 
 Ao combinar o padrão de "proxy" seguro com a técnica de "Tool Calling" (tanto nativa como simulada), conseguimos criar um assistente de IA que é muito mais do que um simples chatbot. Ele é um verdadeiro copiloto para os utilizadores do sistema, capaz de aceder a dados em tempo real e executar ações de forma segura e controlada.
 
 Esta arquitetura não só é poderosa, como também é extensível. Adicionar novas capacidades à nossa IA agora é tão simples como:
+
 1.  Criar um novo endpoint na nossa API em Go.
+
 2.  "Ensinar" a IA sobre a nova ferramenta, atualizando o `systemPrompt`.
+
 3.  Adicionar um novo `if` ao nosso "router" de funções no `chat.js`.
 
 Este é o futuro das aplicações web inteligentes: sistemas onde a IA e a lógica de negócio colaboram para criar experiências de utilizador mais ricas e eficientes.
+
