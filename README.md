@@ -111,3 +111,71 @@ Em vez de apenas conversar, demos à IA um conjunto de "ferramentas" (funções)
 ```bash
 # Exemplo com Podman (ou Docker)
 podman run --rm --name postgres-vendas -e POSTGRES_PASSWORD=1q2w3e -e POSTGRES_USER=me -p 5432:5432 -d postgres:latest
+````
+
+### 3\. Configurar Variáveis de Ambiente
+
+Crie um ficheiro chamado `config.env` na raiz do projeto:
+
+```env
+# Configuração da Base de Dados
+DB_HOST=localhost
+DB_USER=me
+DB_PASS=1q2w3e
+DB_NAME=wallmart
+
+# Configuração da IA (Opcional, apenas para o chat)
+GEMINI_API_KEY=SUA_CHAVE_DE_API_AQUI
+GEMINI_MODEL=gemini-1.5-flash-latest
+```
+
+### 4\. Iniciar e Popular a Base de Dados
+
+Com o container do PostgreSQL a correr, execute os seguintes comandos a partir da raiz do projeto:
+
+```bash
+# 1. Cria a base de dados 'wallmart' e todas as tabelas
+go run ./cmd/data_manager/main.go -init
+
+# 2. (Opcional) Popula o banco com dados de teste (produtos, filiais, utilizadores, vendas, etc.)
+go run ./cmd/populando_banco/main.go
+```
+
+### 5\. Iniciar a Aplicação
+
+Para executar o sistema em modo de desenvolvimento:
+
+```bash
+go run ./cmd/api/main.go
+```
+
+A aplicação estará disponível em `http://localhost:8080`.
+
+## Build para Produção
+
+Para compilar a aplicação num único ficheiro executável, use o comando `go build`. Isto irá criar um binário otimizado que pode ser executado em qualquer servidor sem precisar do código-fonte do Go.
+
+```bash
+# Compila a API principal
+go build -o vendas_api ./cmd/api/main.go
+
+# Compila a ferramenta de gestão de dados
+go build -o data_manager ./cmd/data_manager/main.go
+```
+
+Depois de compilado, pode simplesmente executar o binário:
+`./vendas_api`
+
+## Licença
+
+Este projeto está licenciado sob a Licença MIT.
+
+### Licença MIT
+
+Copyright (c) 2025 Seu Nome ou Nome da Empresa
+
+É concedida permissão, gratuitamente, a qualquer pessoa que obtenha uma cópia deste software e dos ficheiros de documentação associados (o "Software"), para negociar o Software sem restrições, incluindo, sem limitação, os direitos de usar, copiar, modificar, fundir, publicar, distribuir, sublicenciar e/ou vender cópias do Software, e para permitir que as pessoas a quem o Software é fornecido o façam, sujeito às seguintes condições:
+
+O aviso de direitos de autor acima e este aviso de permissão devem ser incluídos em todas as cópias ou partes substanciais do Software.
+
+O SOFTWARE É FORNECIDO "COMO ESTÁ", SEM GARANTIA DE QUALQUER TIPO, EXPRESSA OU IMPLÍCITA, INCLUINDO, MAS NÃO SE LIMITANDO A, GARANTIAS DE COMERCIALIZAÇÃO, ADEQUAÇÃO A UM DETERMINADO FIM E NÃO INFRAÇÃO. EM NENHUM CASO OS AUTORES OU DETENTORES DOS DIREITOS DE AUTOR SERÃO RESPONSÁVEIS POR QUALQUER RECLAMAÇÃO, DANOS OU OUTRA RESPONSABILIDADE, SEJA NUMA AÇÃO DE CONTRATO, DELITO OU OUTRA FORMA, DECORRENTE DE, FORA DE OU EM CONEXÃO COM O SOFTWARE OU O USO OU OUTRAS NEGOCIAÇÕES NO SOFTWARE.
