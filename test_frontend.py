@@ -41,7 +41,6 @@ class VendasSystemTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Configura o ambiente uma vez antes de todos os testes."""
-        # NOVO: Configuração do diretório de screenshots
         cls.photos_dir = os.path.join(os.path.dirname(__file__), "photos")
         if os.path.exists(cls.photos_dir):
             shutil.rmtree(cls.photos_dir)
@@ -158,11 +157,9 @@ class VendasSystemTest(unittest.TestCase):
         """Pausa a execução para facilitar a visualização."""
         time.sleep(STEP_DELAY)
 
-    # NOVO: Função auxiliar para tirar screenshots
     def _take_screenshot(self, name):
         """Tira um screenshot e guarda com um nome descritivo."""
-        # timestamp = time.strftime("%Y%m%d-%H%M%S")
-        timestamp = time.strftime("%Y%m%d")
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
         screenshot_path = os.path.join(self.photos_dir, f"{timestamp}_{name}.png")
         try:
             self.browser.save_screenshot(screenshot_path)
@@ -195,50 +192,66 @@ class VendasSystemTest(unittest.TestCase):
         Select(modal_user.find_element(By.NAME, "role")).select_by_visible_text("Vendedor")
         modal_user.find_element(By.XPATH, ".//button[text()='Guardar']").click()
         
-        self.wait.until(EC.visibility_of_element_located((By.XPATH, f"//td[text()='{novo_user_email}']")))
+        self.wait.until(EC.visibility_of_element_located((By.XPATH, "//*[contains(text(), 'Utilizador adicionado com sucesso!')]")))
+        logger.info("SUCESSO: Mensagem de sucesso ao adicionar utilizador exibida.")
+
+        try:
+            pagination_span = self.wait.until(EC.visibility_of_element_located((By.XPATH, "(//div[contains(@class, 'justify-center')]/span[contains(text(), 'Página')])[1]")))
+            total_pages = int(pagination_span.text.split(' de ')[1])
+            if total_pages > 1:
+                logger.info(f"Navegando para a última página ({total_pages}) de utilizadores...")
+                current_url = self.browser.current_url.split('?')[0]
+                self.browser.get(f"{current_url}?page_users={total_pages}")
+        except (TimeoutException, IndexError, ValueError):
+            logger.info("Paginação não encontrada ou apenas uma página. A procurar na página atual.")
+
+        linha_user = self.wait.until(EC.visibility_of_element_located((By.XPATH, f"//tr[contains(., '{novo_user_email}')]")))
         self._take_screenshot("03_admin_user_adicionado")
         logger.info("SUCESSO: Novo utilizador encontrado na tabela.")
         self._delay()
 
         logger.info(f"A remover o utilizador: {novo_user_email}")
-        linha_user = self.browser.find_element(By.XPATH, f"//tr[contains(., '{novo_user_email}')]")
         linha_user.find_element(By.XPATH, ".//button[normalize-space()='Remover']").click()
         self.wait.until(EC.alert_is_present()).accept()
+        
+        self.wait.until(EC.visibility_of_element_located((By.XPATH, "//*[contains(text(), 'Utilizador removido com sucesso!')]")))
+        logger.info("SUCESSO: Mensagem de sucesso ao remover utilizador exibida.")
+
         self.assertTrue(self.wait.until(EC.staleness_of(linha_user)))
         self._take_screenshot("04_admin_user_removido")
         logger.info("SUCESSO: Utilizador removido.")
         self._delay()
 
-        # --- Teste de CRUD de Sócio ---
-        logger.info("A navegar para a página de Dados da Empresa...")
-        self.browser.find_element(By.LINK_TEXT, "Dados da Empresa").click()
-        self.wait.until(EC.url_contains('/admin/empresa'))
-        self.wait.until(EC.title_contains("Dados da Empresa"))
-        self._take_screenshot("05_admin_pagina_empresa")
-        logger.info("SUCESSO: Navegou para a página da empresa.")
+        # --- Teste de CRUD de Produto ---
+        nome_novo_produto = f"Carro Teste Selenium {timestamp}"
+        logger.info(f"A adicionar novo produto: {nome_novo_produto}")
         
-        novo_socio_cpf = f"123.456.789-{timestamp % 100}"
-        logger.info(f"A adicionar novo sócio com CPF: {novo_socio_cpf}")
+        self.wait.until(EC.element_to_be_clickable((By.XPATH, "//button[normalize-space()='+ Adicionar Produto']"))).click()
+        modal_produto = self.wait.until(EC.visibility_of_element_located((By.ID, "addProductModal")))
+        self._take_screenshot("05_admin_modal_adicionar_produto")
         
-        self.wait.until(EC.element_to_be_clickable((By.XPATH, "//button[normalize-space()='+ Adicionar Sócio']"))).click()
-        modal_socio = self.wait.until(EC.visibility_of_element_located((By.ID, "addSocioModal")))
-        self._take_screenshot("06_admin_modal_adicionar_socio")
-        modal_socio.find_element(By.NAME, "nome").send_keys("Sócio de Teste CRUD")
-        modal_socio.find_element(By.NAME, "cpf").send_keys(novo_socio_cpf)
-        modal_socio.find_element(By.XPATH, ".//button[text()='Adicionar Sócio']").click()
+        modal_produto.find_element(By.NAME, "name").send_keys(nome_novo_produto)
+        modal_produto.find_element(By.NAME, "barcode").send_keys(f"789{timestamp}")
+        modal_produto.find_element(By.NAME, "preco_custo").send_keys("50000.00")
+        modal_produto.find_element(By.NAME, "percentual_lucro").send_keys("20")
+        modal_produto.find_element(By.NAME, "imposto_estadual").send_keys("12")
+        modal_produto.find_element(By.NAME, "imposto_federal").send_keys("15")
+        Select(modal_produto.find_element(By.NAME, "filial_id")).select_by_index(1) # Seleciona a primeira filial da lista
+        modal_produto.find_element(By.NAME, "quantity").send_keys("5")
         
-        self.wait.until(EC.visibility_of_element_located((By.XPATH, f"//td[text()='{novo_socio_cpf}']")))
-        self._take_screenshot("07_admin_socio_adicionado")
-        logger.info("SUCESSO: Novo sócio encontrado na tabela.")
-        self._delay()
+        modal_produto.find_element(By.XPATH, ".//button[text()='Guardar']").click()
 
-        logger.info(f"A remover o sócio com CPF: {novo_socio_cpf}")
-        linha_socio = self.browser.find_element(By.XPATH, f"//tr[contains(., '{novo_socio_cpf}')]")
-        linha_socio.find_element(By.XPATH, ".//button[normalize-space()='Remover']").click()
-        self.wait.until(EC.alert_is_present()).accept()
-        self.assertTrue(self.wait.until(EC.staleness_of(linha_socio)))
-        self._take_screenshot("08_admin_socio_removido")
-        logger.info("SUCESSO: Sócio removido.")
+        self.wait.until(EC.visibility_of_element_located((By.XPATH, "//*[contains(text(), 'Produto adicionado com sucesso!')]")))
+        logger.info("SUCESSO: Mensagem de sucesso ao adicionar produto exibida.")
+
+        # Procura pelo novo produto para validar
+        self.browser.find_element(By.NAME, "search_products").send_keys(nome_novo_produto)
+        self.browser.find_element(By.XPATH, "//form[contains(@action, '/admin/dashboard')]//button[@type='submit']").click()
+        
+        self.wait.until(EC.visibility_of_element_located((By.XPATH, f"//td[text()='{nome_novo_produto}']")))
+        self._take_screenshot("06_admin_produto_adicionado")
+        logger.info("SUCESSO: Novo produto encontrado na tabela após a busca.")
+        self._delay()
 
     def test_02_vendedor_login_and_sale(self):
         """Testa o login do vendedor e simula uma venda completa."""
@@ -329,6 +342,35 @@ class VendasSystemTest(unittest.TestCase):
         self.wait.until(EC.visibility_of_element_located((By.XPATH, "//*[contains(text(), 'Stock adicionado com sucesso!')]")))
         self._take_screenshot("16_estoquista_novo_produto_criado_sucesso")
         logger.info("SUCESSO: Mensagem de sucesso ao criar novo produto exibida.")
+
+    def test_04_admin_monitoring_dashboard(self):
+        """Testa o acesso e a visualização do novo dashboard de monitoramento."""
+        logger.info("--- INICIANDO TESTE 04: DASHBOARD DE MONITORAMENTO DO ADMIN ---")
+        self._login(ADMIN_EMAIL, TEST_PASS)
+
+        logger.info("A navegar para o Dashboard de Monitoramento...")
+        self.wait.until(EC.element_to_be_clickable((By.LINK_TEXT, "Monitoramento"))).click()
+        
+        self.wait.until(EC.url_contains('/admin/monitoring'))
+        self.wait.until(EC.title_contains("Dashboard de Monitoramento"))
+        self._take_screenshot("17_admin_dashboard_monitoramento")
+        logger.info("SUCESSO: Navegou para a página de monitoramento.")
+        self._delay()
+
+        logger.info("A verificar a presença dos KPIs...")
+        self.wait.until(EC.visibility_of_element_located((By.XPATH, "//*[contains(text(), 'Faturamento Total')]")))
+        self.wait.until(EC.visibility_of_element_located((By.XPATH, "//*[contains(text(), 'Total de Transações')]")))
+        self.wait.until(EC.visibility_of_element_located((By.XPATH, "//*[contains(text(), 'Ticket Médio')]")))
+        logger.info("SUCESSO: KPIs encontrados.")
+
+        logger.info("A verificar a presença do gráfico de vendas...")
+        self.wait.until(EC.visibility_of_element_located((By.ID, "salesByBranchChart")))
+        logger.info("SUCESSO: Gráfico de vendas encontrado.")
+
+        logger.info("A verificar a presença da lista de alertas de stock...")
+        self.wait.until(EC.visibility_of_element_located((By.XPATH, "//*[contains(text(), 'Alertas de Stock Baixo')]")))
+        logger.info("SUCESSO: Lista de alertas encontrada.")
+        self._delay()
 
 
 if __name__ == '__main__':

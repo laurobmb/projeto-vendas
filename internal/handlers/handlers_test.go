@@ -52,8 +52,9 @@ func (m *mockStorage) GetSalesSummary() ([]models.SalesSummary, error) {
 		{FilialNome: "Filial Teste", TotalVendas: 1234.56},
 	}, nil
 }
+// ATUALIZADO: O mock agora implementa todas as funções da interface.
 func (m *mockStorage) GetFilialByID(id string) (*models.Filial, error) { return &models.Filial{ID: uuid.New(), Nome: "Filial Teste"}, nil }
-func (m *mockStorage) CountUsers() (int, error)                       { return 1, nil }
+func (m *mockStorage) CountUsers() (int, error) { return 1, nil }
 func (m *mockStorage) GetUsersPaginated(limit, offset int) ([]models.User, error) { return []models.User{}, nil }
 func (m *mockStorage) CountProducts(searchQuery string) (int, error) { return 0, nil }
 func (m *mockStorage) GetProductsPaginatedAndFiltered(searchQuery string, limit, offset int) ([]models.Product, error) { return []models.Product{}, nil }
@@ -61,7 +62,12 @@ func (m *mockStorage) GetAllFiliais() ([]models.Filial, error) { return []models
 func (m *mockStorage) UpdateUser(userID string, user models.User, newPassword string) error { return nil }
 func (m *mockStorage) CountSales(filialID string) (int, error) { return 0, nil }
 func (m *mockStorage) GetSalesPaginated(filialID string, limit, offset int) ([]models.SaleReportItem, error) { return []models.SaleReportItem{}, nil }
-func (m *mockStorage) SearchProductsForSale(query string, filialID uuid.UUID) ([]models.Product, error) { return []models.Product{}, nil }
+func (m *mockStorage) SearchProductsForSale(query string, filialID uuid.UUID) ([]models.Product, error) { 
+	if query == "ProdutoExistente" {
+		return []models.Product{{ID: uuid.New(), Nome: "Produto Existente", CodigoBarras: "123", PrecoSugerido: 10.0}}, nil
+	}
+	return []models.Product{}, nil
+}
 func (m *mockStorage) RegisterSale(sale models.Venda, items []models.ItemVenda) error { return nil }
 func (m *mockStorage) CreateProductWithInitialStock(product models.Product, filialID string, quantity int) error { return nil }
 func (m *mockStorage) AddStockItem(productID, filialID string, quantity int) error { return nil }
@@ -69,8 +75,10 @@ func (m *mockStorage) GetAllProductsSimple() ([]models.Product, error) { return 
 func (m *mockStorage) CountStockItems(filialID, searchQuery string) (int, error) { return 0, nil }
 func (m *mockStorage) GetStockItemsPaginated(filialID, searchQuery string, limit, offset int) ([]models.StockViewItem, error) { return []models.StockViewItem{}, nil }
 func (m *mockStorage) UpdateStockQuantity(productID, filialID string, newQuantity int) error { return nil }
+func (m *mockStorage) UpsertStockQuantity(productID, filialID string, quantity int) error { return nil }
 func (m *mockStorage) AddUser(user models.User, password string) error { return nil }
 func (m *mockStorage) AddProduct(product models.Product) error { return nil }
+func (m *mockStorage) UpdateProduct(productID string, product models.Product) error { return nil }
 func (m *mockStorage) UpdateSocio(socioID string, socio models.Socio) error { return nil }
 func (m *mockStorage) GetEmpresa() (*models.Empresa, error) { return &models.Empresa{}, nil }
 func (m *mockStorage) UpsertEmpresa(empresa models.Empresa) error { return nil }
@@ -81,6 +89,15 @@ func (m *mockStorage) DeleteUserByID(id string) error { return nil }
 func (m *mockStorage) DeleteProductByID(id string) error { return nil }
 func (m *mockStorage) GetProductStockByFilial(productID string) ([]models.StockDetail, error) { return []models.StockDetail{}, nil }
 func (m *mockStorage) AdjustStockQuantity(productID, filialID string, quantityToRemove int) error { return nil }
+func (m *mockStorage) GetSalesSummary() ([]models.SalesSummary, error) { return []models.SalesSummary{}, nil }
+func (m *mockStorage) FilterProducts(category string, minPrice float64) ([]models.Product, error) { return []models.Product{}, nil }
+func (m *mockStorage) GetTopSellers() ([]models.TopSeller, error) { return []models.TopSeller{}, nil }
+func (m *mockStorage) GetLowStockProducts(filialNome string, limit int) ([]models.LowStockProduct, error) { return []models.LowStockProduct{}, nil }
+func (m *mockStorage) GetTopBillingBranch(period string) (*models.TopBillingBranch, error) { return &models.TopBillingBranch{}, nil }
+func (m *mockStorage) GetSalesSummaryByBranch(period string, branchName string) (*models.BranchSalesSummary, error) { return &models.BranchSalesSummary{}, nil }
+func (m *mockStorage) GetTopSellerByPeriod(period string) (*models.TopSeller, error) { return &models.TopSeller{}, nil }
+func (m *mockStorage) GetDailySalesByBranch(days int) ([]models.DailyBranchSales, error) { return []models.DailyBranchSales{}, nil }
+func (m *mockStorage) GetDashboardMetrics(days int) (float64, int, error) { return 0.0, 0, nil }
 
 
 // --- Fim do Mock ---

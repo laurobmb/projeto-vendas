@@ -305,6 +305,7 @@ func (h *Handler) ShowEstoquistaDashboard(c *gin.Context) {
 }
 
 func (h *Handler) HandleAddUser(c *gin.Context) {
+	session := sessions.Default(c)
 	user := models.User{
 		Nome:  c.PostForm("name"),
 		Email: c.PostForm("email"),
@@ -323,7 +324,11 @@ func (h *Handler) HandleAddUser(c *gin.Context) {
 	err := h.Storage.AddUser(user, password)
 	if err != nil {
 		log.Printf("Erro ao adicionar utilizador: %v", err)
+		session.AddFlash(fmt.Sprintf("Falha ao adicionar utilizador: %v", err), "error")
+	} else {
+		session.AddFlash("Utilizador adicionado com sucesso!", "success")
 	}
+	session.Save()
 	c.Redirect(http.StatusFound, "/admin/dashboard")
 }
 
@@ -411,8 +416,15 @@ func (h *Handler) HandleEditProduct(c *gin.Context) {
 }
 
 func (h *Handler) HandleDeleteUser(c *gin.Context) {
+	session := sessions.Default(c)
 	err := h.Storage.DeleteUserByID(c.Param("id"))
-	if err != nil { log.Printf("Erro ao apagar utilizador: %v", err) }
+	if err != nil {
+		log.Printf("Erro ao apagar utilizador: %v", err)
+		session.AddFlash(fmt.Sprintf("Falha ao apagar utilizador: %v", err), "error")
+	} else {
+		session.AddFlash("Utilizador removido com sucesso!", "success")
+	}
+	session.Save()
 	c.Redirect(http.StatusFound, c.Request.Header.Get("Referer"))
 }
 

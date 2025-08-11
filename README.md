@@ -1,203 +1,137 @@
-Com certeza\! Aqui está o conteúdo do `README.md` em formato cru, pronto para ser copiado:
+# Sistema de Gestão de Vendas e Stock com Assistente de IA
 
-# Sistema de Gestão de Vendas e Stock
+Este é um sistema web completo para a gestão de um negócio de retalho com múltiplas filiais.  
+A aplicação foi desenvolvida em **Go (Golang)**, utiliza **PostgreSQL** como base de dados e integra um **assistente de Inteligência Artificial** para análise de dados em tempo real.
 
-Este é um sistema web completo para a gestão de um negócio de retalho com múltiplas filiais. A aplicação foi desenvolvida em Go (Golang) e utiliza PostgreSQL como base de dados. O sistema oferece diferentes painéis e funcionalidades baseados no cargo do utilizador (Administrador, Estoquista, Vendedor).
-
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Relatório Visual dos Testes</title>
-</head>
-<body>
-    <h2 align="center">Relatório Visual dos Testes de Frontend</h2>
-    <table width="100%" border="1" style="border-collapse: collapse; margin: auto;">
-        <thead>
-            <tr style="background-color: #f2f2f2;">
-                <th style="padding: 10px; text-align: left;">Passo do Teste</th>
-                <th style="padding: 10px; text-align: left;">Passo Seguinte</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr>
-                <td style="padding: 10px;"><img src="photos/20250808-171135_00_tela_login_preenchida.png" alt="Tela de login preenchida" width="100%"></td>
-                <td style="padding: 10px;"><img src="photos/20250808-171135_01_admin_dashboard.png" alt="Dashboard do Admin" width="100%"></td>
-            </tr>
-            <tr>
-                <td style="padding: 10px;"><img src="photos/20250808-171136_02_admin_modal_adicionar_user.png" alt="Modal para adicionar utilizador" width="100%"></td>
-                <td style="padding: 10px;"><img src="photos/20250808-171137_03_admin_user_adicionado.png" alt="Utilizador adicionado" width="100%"></td>
-            </tr>
-            <tr>
-                <td style="padding: 10px;"><img src="photos/20250808-171138_04_admin_user_removido.png" alt="Utilizador removido" width="100%"></td>
-                <td style="padding: 10px;"><img src="photos/20250808-171138_05_admin_pagina_empresa.png" alt="Página de dados da empresa" width="100%"></td>
-            </tr>
-            <tr>
-                <td style="padding: 10px;"><img src="photos/20250808-171139_06_admin_modal_adicionar_socio.png" alt="Modal para adicionar sócio" width="100%"></td>
-                <td style="padding: 10px;"><img src="photos/20250808-171139_07_admin_socio_adicionado.png" alt="Sócio adicionado" width="100%"></td>
-            </tr>
-            <tr>
-                <td style="padding: 10px;"><img src="photos/20250808-171140_00_tela_login_preenchida.png" alt="Tela de login preenchida" width="100%"></td>
-                <td style="padding: 10px;"><img src="photos/20250808-171140_08_admin_socio_removido.png" alt="Sócio removido" width="100%"></td>
-            </tr>
-            <tr>
-                <td style="padding: 10px;"><img src="photos/20250808-171141_09_vendedor_terminal_vazio.png" alt="Terminal de vendas do vendedor (vazio)" width="100%"></td>
-                <td style="padding: 10px;"><img src="photos/20250808-171142_10_vendedor_item_no_carrinho.png" alt="Item adicionado ao carrinho" width="100%"></td>
-            </tr>
-            <tr>
-                <td style="padding: 10px;"><img src="photos/20250808-171143_00_tela_login_preenchida.png" alt="Tela de login preenchida" width="100%"></td>
-                <td style="padding: 10px;"><img src="photos/20250808-171143_11_vendedor_venda_finalizada.png" alt="Venda finalizada" width="100%"></td>
-            </tr>
-            <tr>
-                <td style="padding: 10px;"><img src="photos/20250808-171144_12_estoquista_dashboard.png" alt="Dashboard do estoquista" width="100%"></td>
-                <td style="padding: 10px;"><img src="photos/20250808-171144_13_estoquista_modal_adicionar_existente.png" alt="Modal para adicionar stock a produto existente" width="100%"></td>
-            </tr>
-            <tr>
-                <td style="padding: 10px;"><img src="photos/20250808-171145_14_estoquista_stock_adicionado_sucesso.png" alt="Mensagem de sucesso ao adicionar stock" width="100%"></td>
-                <td style="padding: 10px;"><img src="photos/20250808-171145_15_estoquista_modal_criar_novo.png" alt="Modal para criar novo produto" width="100%"></td>
-            </tr>
-            <tr>
-                <td style="padding: 10px;"><img src="photos/20250808-171146_16_estoquista_novo_produto_criado_sucesso.png" alt="Mensagem de sucesso ao criar novo produto" width="100%"></td>
-                <td style="padding: 10px;"></td> <!-- Célula vazia para manter o layout -->
-            </tr>
-        </tbody>
-    </table>
-</body>
-</html>
-
+---
 
 ## Funcionalidades Principais
 
-* **Autenticação por Cargos:** Sistema de login seguro que direciona os utilizadores para painéis específicos:
-    * **Painel de Administrador:** Visão completa do negócio com gestão de utilizadores, catálogo de produtos, stock por filial, dados da empresa, sócios e relatórios de vendas.
-    * **Painel de Estoquista:** Interface focada na gestão de stock da sua filial, permitindo a adição de novos produtos e a entrada de stock para itens existentes.
-    * **Terminal de Vendas (PDV):** Ponto de Venda rápido e interativo para os vendedores, com busca de produtos por nome ou código de barras e registo de transações em tempo real.
-* **Gestão Multi-Filial:** O stock é gerido de forma granular por cada loja/filial.
-* **Catálogo de Produtos Centralizado:** Um painel para gerir todos os produtos, incluindo nome, descrição, preço e código de barras.
-* **Relatórios de Vendas:** Visualização de todas as vendas realizadas, com filtros por filial.
-* **Gestão de Dados da Empresa:** Uma área para gerir os dados fiscais da empresa e os seus sócios, preparando o sistema para a futura emissão de notas fiscais.
+- **Autenticação por Cargos**: Sistema de login seguro que direciona os utilizadores para painéis específicos:
+  - **Painel de Administrador**: Visão completa do negócio com gestão de utilizadores, catálogo de produtos, stock por filial, dados da empresa, sócios e relatórios de vendas.
+  - **Painel de Estoquista**: Interface focada na gestão de stock da sua filial, permitindo a adição de novos produtos e a entrada de stock para itens existentes.
+  - **Terminal de Vendas (PDV)**: Ponto de Venda rápido e interativo para os vendedores, com busca de produtos e registo de transações.
+
+- **Dashboard de Monitoramento (Admin)**: Página visual com KPIs (faturamento, transações, ticket médio), gráfico de vendas diárias por filial e lista de alertas de stock baixo.
+
+- **Assistente de IA (Chatbot)**: Um chat flutuante disponível para todos os perfis, capaz de:
+  - Analisar o faturamento por filial.
+  - Gerar um ranking dos melhores vendedores.
+  - Listar produtos com stock baixo.
+  - Filtrar o catálogo de produtos por categoria e preço.
+
+---
+
+## Arquitetura da Inteligência Artificial
+
+A integração da IA foi desenhada com foco em **segurança, controlo e flexibilidade**, utilizando a técnica de **"Tool Calling"**.
+
+### Padrão de "Proxy" Seguro
+
+A chave de API (seja da Gemini ou de outro serviço) **nunca é exposta no frontend**.
+
+Fluxo de comunicação:
+1. **Frontend (`chat.js`)** → envia a pergunta para `/api/chat`.
+2. **Backend (`handlers.go`)** → lê a chave API de forma segura nas variáveis de ambiente.
+3. **Chamada à API da IA** → devolve a resposta processada para o frontend.
+
+---
+
+### Técnica Central: "Tool Calling"
+
+1. **Pensamento**:  
+   Exemplo — Pergunta: *"Qual filial vendeu mais este mês?"*.  
+   IA responde com:  
+   ```json
+   {"functionCall": "getTopBillingBranch", "period": "month"}
+````
+
+2. **Resposta**:
+   O `chat.js` executa a função, envia os dados reais para a IA e recebe a resposta final formatada.
+
+---
+
+## Implementação com Google Gemini vs. Ollama
+
+* **Google Gemini**: Suporte nativo a "Tool Calling".
+* **Ollama (Llama 3)**: Implementado via *Prompt Engineering*, simulando o retorno JSON.
+
+---
+
+## Relatório Visual dos Testes de Frontend
+
+<h3 align="center">Fluxo Completo da Aplicação</h3>
+<table width="100%" border="1" style="border-collapse: collapse; margin: auto;">
+<thead>
+<tr style="background-color: #f2f2f2;">
+<th style="padding: 10px; text-align: center;">Passo do Teste</th>
+<th style="padding: 10px; text-align: center;">Passo Seguinte</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="padding: 10px;"><img src="photos/20250811-014901_00_tela_login_preenchida.png" alt="Tela de login preenchida" width="100%"></td>
+<td style="padding: 10px;"><img src="photos/20250811-014901_01_admin_dashboard.png" alt="Dashboard do Admin" width="100%"></td>
+</tr>
+<tr>
+<td style="padding: 10px;"><img src="photos/20250811-014902_02_admin_modal_adicionar_user.png" alt="Modal para adicionar utilizador" width="100%"></td>
+<td style="padding: 10px;"><img src="photos/20250811-014903_03_admin_user_adicionado.png" alt="Utilizador adicionado" width="100%"></td>
+</tr>
+<tr>
+<td style="padding: 10px;"><img src="photos/20250811-014904_04_admin_user_removido.png" alt="Utilizador removido" width="100%"></td>
+<td style="padding: 10px;"><img src="photos/20250811-014904_05_admin_modal_adicionar_produto.png" alt="Modal para adicionar produto" width="100%"></td>
+</tr>
+<tr>
+<td style="padding: 10px;"><img src="photos/20250811-014905_06_admin_produto_adicionado.png" alt="Produto adicionado" width="100%"></td>
+<td style="padding: 10px;"><img src="photos/20250811-014906_09_vendedor_terminal_vazio.png" alt="Terminal de vendas do vendedor (vazio)" width="100%"></td>
+</tr>
+<tr>
+<td style="padding: 10px;"><img src="photos/20250811-014908_10_vendedor_item_no_carrinho.png" alt="Item adicionado ao carrinho" width="100%"></td>
+<td style="padding: 10px;"><img src="photos/20250811-014909_11_vendedor_venda_finalizada.png" alt="Venda finalizada" width="100%"></td>
+</tr>
+<tr>
+<td style="padding: 10px;"><img src="photos/20250811-014910_12_estoquista_dashboard.png" alt="Dashboard do estoquista" width="100%"></td>
+<td style="padding: 10px;"><img src="photos/20250811-014910_13_estoquista_modal_adicionar_existente.png" alt="Modal para adicionar stock a produto existente" width="100%"></td>
+</tr>
+<tr>
+<td style="padding: 10px;"><img src="photos/20250811-014911_14_estoquista_stock_adicionado_sucesso.png" alt="Mensagem de sucesso ao adicionar stock" width="100%"></td>
+<td style="padding: 10px;"><img src="photos/20250811-014912_15_estoquista_modal_criar_novo.png" alt="Modal para criar novo produto" width="100%"></td>
+</tr>
+<tr>
+<td style="padding: 10px;"><img src="photos/20250811-014912_16_estoquista_novo_produto_criado_sucesso.png" alt="Mensagem de sucesso ao criar novo produto" width="100%"></td>
+<td style="padding: 10px;"><img src="photos/20250811-014913_17_admin_dashboard_monitoramento.png" alt="Dashboard de Monitoramento do Admin" width="100%"></td>
+</tr>
+</tbody>
+</table>
+
+---
 
 ## Tecnologias Utilizadas
 
-* **Backend:** Go (Golang)
-* **Framework Web:** Gin Gonic
-* **Base de Dados:** PostgreSQL
-* **Frontend:** HTML5, Tailwind CSS, JavaScript
-* **Testes:**
-    * **Backend:** Pacote `testing` nativo do Go.
-    * **Frontend (E2E):** Python com Selenium.
+* **Backend**: Go (Golang)
+* **Framework Web**: Gin Gonic
+* **Base de Dados**: PostgreSQL
+* **Frontend**: HTML5, Tailwind CSS, JavaScript, Chart.js
+* **Inteligência Artificial**: Google Gemini / Ollama (Llama 3)
+* **Testes**:
 
-## Pré-requisitos
+  * Backend: Pacote `testing` nativo do Go.
+  * Frontend (E2E): Python com Selenium.
 
-* Go (versão 1.18 ou superior)
-* PostgreSQL
-* Python 3 (para os testes de frontend)
-* Google Chrome e ChromeDriver (para os testes de frontend)
+---
 
-## Configuração do Ambiente
+## Configuração e Execução
 
-1.  **Clone o repositório:**
-    ```bash
-    git clone <url-do-seu-repositorio>
-    cd projeto-vendas
-    ```
+*(Esta secção permanece igual)*
 
-2.  **Configure as Variáveis de Ambiente:**
-    Crie um ficheiro chamado `config.env` na raiz do projeto com as suas credenciais da base de dados de desenvolvimento:
-    ```env
-    DB_HOST=localhost
-    DB_USER=seu_usuario_pg
-    DB_PASS=sua_senha_pg
-    DB_NAME=wallmart
-    ```
-
-3.  **Instale as Dependências do Go:**
-    ```bash
-    go mod tidy
-    ```
-
-## Como Executar
-
-### 1. Preparar a Base de Dados
-
-Execute o nosso gestor de dados para criar a base de dados e todas as tabelas necessárias.
-
-```bash
-go run ./cmd/data_manager/main.go -init
-````
-
-### 2\. Popular com Dados de Teste (Opcional)
-
-Para ter um ambiente com dados realistas (filiais, empresa, sócios e 2000 produtos), execute o script de população:
-
-```bash
-go run ./cmd/populando_banco/main.go
-```
-
-### 3\. Criar Utilizadores
-
-Use a ferramenta de linha de comando para criar os seus utilizadores iniciais:
-
-```bash
-# Criar um Administrador
-go run ./cmd/create_user/main.go -name="Admin" -email="admin@email.com" -password="senha123" -role="admin"
-
-# Criar um Vendedor (precisa do ID de uma filial)
-go run ./cmd/create_user/main.go -name="Vendedor" -email="vendedor@email.com" -password="senha123" -role="vendedor" -filialid="<id-da-filial>"
-```
-
-> **Dica:** Para obter os IDs das filiais, use o comando: `go run ./cmd/data_manager/main.go -list-filiais`
-
-### 4\. Iniciar o Servidor Web
-
-Com a base de dados pronta, inicie a aplicação principal:
-
-```bash
-go run ./cmd/api/main.go
-```
-
-A aplicação estará disponível em `http://localhost:8080`.
-
-## Como Executar os Testes
-
-### 1\. Testes de Backend (Go)
-
-Crie um ficheiro `.env.test` na raiz do projeto com as credenciais para uma base de dados de teste (ela será criada e apagada automaticamente).
-
-```env
-DB_HOST=localhost
-DB_USER=seu_usuario_pg
-DB_PASS=sua_senha_pg
-DB_NAME=wallmart_test
-```
-
-Execute o seguinte comando a partir da raiz do projeto:
-
-```bash
-go test ./... -v
-```
-
-### 2\. Testes de Frontend (Python + Selenium)
-
-Certifique-se de que tem o `selenium` e o `psycopg2-binary` instalados:
-
-```bash
-pip install selenium psycopg2-binary
-```
-
-Com o servidor web a correr (`go run ./cmd/api/main.go`), abra um **novo terminal** e execute o script de teste:
-
-```bash
-python3 test_frontend.py
-```
+---
 
 ## Licença
 
 Este projeto está licenciado sob a Licença MIT.
 
-### Licença MIT
-
+```
+Licença MIT
 Copyright (c) 2025 Seu Nome ou Nome da Empresa
 
 É concedida permissão, gratuitamente, a qualquer pessoa que obtenha uma cópia deste software e dos ficheiros de documentação associados (o "Software"), para negociar o Software sem restrições, incluindo, sem limitação, os direitos de usar, copiar, modificar, fundir, publicar, distribuir, sublicenciar e/ou vender cópias do Software, e para permitir que as pessoas a quem o Software é fornecido o façam, sujeito às seguintes condições:
@@ -205,4 +139,3 @@ Copyright (c) 2025 Seu Nome ou Nome da Empresa
 O aviso de direitos de autor acima e este aviso de permissão devem ser incluídos em todas as cópias ou partes substanciais do Software.
 
 O SOFTWARE É FORNECIDO "COMO ESTÁ", SEM GARANTIA DE QUALQUER TIPO, EXPRESSA OU IMPLÍCITA, INCLUINDO, MAS NÃO SE LIMITANDO A, GARANTIAS DE COMERCIALIZAÇÃO, ADEQUAÇÃO A UM DETERMINADO FIM E NÃO INFRAÇÃO. EM NENHUM CASO OS AUTORES OU DETENTORES DOS DIREITOS DE AUTOR SERÃO RESPONSÁVEIS POR QUALQUER RECLAMAÇÃO, DANOS OU OUTRA RESPONSABILIDADE, SEJA NUMA AÇÃO DE CONTRATO, DELITO OU OUTRA FORMA, DECORRENTE DE, FORA DE OU EM CONEXÃO COM O SOFTWARE OU O USO OU OUTRAS NEGOCIAÇÕES NO SOFTWARE.
-

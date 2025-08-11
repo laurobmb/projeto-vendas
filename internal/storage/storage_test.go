@@ -21,7 +21,6 @@ var testProduct models.Product
 
 // TestMain é uma função especial que é executada antes de todos os outros testes neste pacote.
 func TestMain(m *testing.M) {
-	// CORREÇÃO: Lógica robusta para encontrar e carregar o ficheiro .env.test
 	loadTestEnv()
 
 	dbName := os.Getenv("DB_NAME")
@@ -30,7 +29,7 @@ func TestMain(m *testing.M) {
 	}
 
 	createTestDatabase(dbName)
-	
+
 	var err error
 	testStorage, err = NewStorage()
 	if err != nil {
@@ -76,7 +75,7 @@ func loadTestEnv() {
 func createTestDatabase(dbName string) {
 	dsn := fmt.Sprintf("postgres://%s:%s@%s/postgres?sslmode=disable",
 		os.Getenv("DB_USER"), os.Getenv("DB_PASS"), os.Getenv("DB_HOST"))
-	
+
 	conn, err := pgx.Connect(context.Background(), dsn)
 	if err != nil {
 		log.Fatalf("Não foi possível conectar ao servidor PostgreSQL: %v", err)
@@ -84,7 +83,7 @@ func createTestDatabase(dbName string) {
 	defer conn.Close(context.Background())
 
 	_, _ = conn.Exec(context.Background(), fmt.Sprintf("DROP DATABASE IF EXISTS %s WITH (FORCE)", dbName))
-	
+
 	_, err = conn.Exec(context.Background(), fmt.Sprintf("CREATE DATABASE %s", dbName))
 	if err != nil {
 		log.Fatalf("Falha ao criar a base de dados de teste: %v", err)
@@ -92,13 +91,25 @@ func createTestDatabase(dbName string) {
 	log.Printf("Base de dados '%s' criada com sucesso para os testes.", dbName)
 }
 
-// setup cria as tabelas e os dados de teste necessários.
 func setup(s *Storage) {
 	initSQLScript := `
 		CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 		CREATE TABLE IF NOT EXISTS filiais (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), nome VARCHAR(150) UNIQUE NOT NULL, endereco TEXT, data_criacao TIMESTAMPTZ NOT NULL DEFAULT NOW());
 		CREATE TABLE IF NOT EXISTS usuarios (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), filial_id UUID, nome VARCHAR(100) NOT NULL, email VARCHAR(100) UNIQUE NOT NULL, senha_hash VARCHAR(255) NOT NULL, cargo VARCHAR(20) NOT NULL, data_criacao TIMESTAMPTZ NOT NULL DEFAULT NOW(), CONSTRAINT fk_filial_usuario FOREIGN KEY(filial_id) REFERENCES filiais(id) ON DELETE SET NULL);
-		CREATE TABLE IF NOT EXISTS produtos (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), nome VARCHAR(150) UNIQUE NOT NULL, descricao TEXT, codigo_barras VARCHAR(100) UNIQUE, preco_sugerido DECIMAL(10, 2) NOT NULL, data_criacao TIMESTAMPTZ NOT NULL DEFAULT NOW(), data_atualizacao TIMESTAMPTZ NOT NULL DEFAULT NOW());
+		CREATE TABLE IF NOT EXISTS produtos (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			nome VARCHAR(150) UNIQUE NOT NULL,
+			descricao TEXT,
+			codigo_barras VARCHAR(100) UNIQUE,
+			codigo_cnae VARCHAR(15),
+			preco_custo DECIMAL(10, 2) NOT NULL DEFAULT 0,
+			percentual_lucro DECIMAL(5, 2) NOT NULL DEFAULT 0,
+			imposto_estadual DECIMAL(5, 2) NOT NULL DEFAULT 0,
+			imposto_federal DECIMAL(5, 2) NOT NULL DEFAULT 0,
+			preco_sugerido DECIMAL(10, 2) NOT NULL,
+			data_criacao TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			data_atualizacao TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		);
 		CREATE TABLE IF NOT EXISTS estoque_filiais (produto_id UUID NOT NULL, filial_id UUID NOT NULL, quantidade INT NOT NULL, data_atualizacao TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (produto_id, filial_id), CONSTRAINT fk_produto_estoque FOREIGN KEY(produto_id) REFERENCES produtos(id) ON DELETE CASCADE, CONSTRAINT fk_filial_estoque FOREIGN KEY(filial_id) REFERENCES filiais(id) ON DELETE CASCADE);
 		CREATE TABLE IF NOT EXISTS vendas (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), usuario_id UUID NOT NULL, filial_id UUID NOT NULL, total_venda DECIMAL(10, 2) NOT NULL, data_venda TIMESTAMPTZ NOT NULL DEFAULT NOW(), CONSTRAINT fk_usuario_venda FOREIGN KEY(usuario_id) REFERENCES usuarios(id) ON DELETE RESTRICT, CONSTRAINT fk_filial_venda FOREIGN KEY(filial_id) REFERENCES filiais(id) ON DELETE RESTRICT);
 		CREATE TABLE IF NOT EXISTS itens_venda (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), venda_id UUID NOT NULL, produto_id UUID NOT NULL, quantidade INT NOT NULL, preco_unitario DECIMAL(10, 2) NOT NULL, CONSTRAINT fk_venda FOREIGN KEY(venda_id) REFERENCES vendas(id) ON DELETE CASCADE, CONSTRAINT fk_produto FOREIGN KEY(produto_id) REFERENCES produtos(id) ON DELETE RESTRICT);
@@ -114,12 +125,40 @@ func setup(s *Storage) {
 		log.Fatalf("Falha ao inserir filial de teste: %v", err)
 	}
 
-	testProduct = models.Product{ID: uuid.New(), Nome: "Produto de Teste", CodigoBarras: "123456789", PrecoSugerido: 9.99}
-	_, err = s.Dbpool.Exec(context.Background(), "INSERT INTO produtos (id, nome, codigo_barras, preco_sugerido) VALUES ($1, $2, $3, $4)", testProduct.ID, testProduct.Nome, testProduct.CodigoBarras, testProduct.PrecoSugerido)
+	testProduct = models.Product{
+		ID:              uuid.New(),
+		Nome:            "Produto de Teste",
+		CodigoBarras:    "123456789",
+		PrecoCusto:      5.0,
+		PercentualLucro: 50.0,
+		ImpostoEstadual: 18.0,
+		ImpostoFederal:  12.0,
+		PrecoSugerido:   9.0, // 5 * (1 + 0.5 + 0.18 + 0.12) = 5 * 1.8 = 9.0
+	}
+	_, err = s.Dbpool.Exec(context.Background(), "INSERT INTO produtos (id, nome, codigo_barras, preco_custo, percentual_lucro, imposto_estadual, imposto_federal, preco_sugerido) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+		testProduct.ID, testProduct.Nome, testProduct.CodigoBarras, testProduct.PrecoCusto, testProduct.PercentualLucro, testProduct.ImpostoEstadual, testProduct.ImpostoFederal, testProduct.PrecoSugerido)
 	if err != nil {
 		log.Fatalf("Falha ao inserir produto de teste: %v", err)
 	}
 }
+
+func cleanup(dbName string) {
+	dsn := fmt.Sprintf("postgres://%s:%s@%s/postgres?sslmode=disable",
+		os.Getenv("DB_USER"), os.Getenv("DB_PASS"), os.Getenv("DB_HOST"))
+
+	conn, err := pgx.Connect(context.Background(), dsn)
+	if err != nil {
+		log.Fatalf("Não foi possível conectar ao servidor PostgreSQL para limpeza: %v", err)
+	}
+	defer conn.Close(context.Background())
+
+	_, err = conn.Exec(context.Background(), fmt.Sprintf("DROP DATABASE IF EXISTS %s WITH (FORCE)", dbName))
+	if err != nil {
+		log.Fatalf("Falha ao apagar a base de dados de teste: %v", err)
+	}
+	log.Printf("Base de dados '%s' apagada com sucesso.", dbName)
+}
+
 
 // cleanup apaga a base de dados de teste.
 func cleanup(dbName string) {
