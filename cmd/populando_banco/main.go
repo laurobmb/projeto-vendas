@@ -70,8 +70,8 @@ type StockItem struct {
 }
 
 const (
-	numProdutos = 10000 // Total de produtos a serem criados
-	numWorkers  = 10   // Número de goroutines para inserção no DB
+	numProdutos = 50000 // Total de produtos a serem criados
+	numWorkers  = 15   // Número de goroutines para inserção no DB
 )
 
 var (

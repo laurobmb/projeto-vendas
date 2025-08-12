@@ -64,6 +64,7 @@ type Store interface {
 	GetTopSellers(days int) ([]models.TopSeller, error)
 	GetTotalStockValue() (float64, error)
 	GetStockComposition() ([]models.StockComposition, error)
+	GetProductDetails(identifier string) (*models.Product, error)
 
 }
 
@@ -887,5 +888,32 @@ func (s *Storage) GetFinancialKPIs(days int) (models.FinancialKPIs, error) {
 	}
 
 	return kpis, nil
+}
+
+func (s *Storage) GetProductDetails(identifier string) (*models.Product, error) {
+	var p models.Product
+	sql := `
+		SELECT 
+			p.id, p.nome, p.descricao, COALESCE(p.categoria, ''), p.codigo_barras, COALESCE(p.codigo_cnae, ''), 
+			p.preco_custo, p.percentual_lucro, p.imposto_estadual, p.imposto_federal, p.preco_sugerido,
+			COALESCE(SUM(ef.quantidade), 0) as total_estoque
+		FROM produtos p
+		LEFT JOIN estoque_filiais ef ON p.id = ef.produto_id
+		WHERE p.codigo_barras = $1 OR p.codigo_cnae = $1
+		GROUP BY p.id
+		LIMIT 1;
+	`
+	err := s.Dbpool.QueryRow(context.Background(), sql, identifier).Scan(
+		&p.ID, &p.Nome, &p.Descricao, &p.Categoria, &p.CodigoBarras, &p.CodigoCNAE,
+		&p.PrecoCusto, &p.PercentualLucro, &p.ImpostoEstadual, &p.ImpostoFederal, &p.PrecoSugerido,
+		&p.TotalEstoque, // Adicionado o scan para o estoque
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &p, nil
 }
 

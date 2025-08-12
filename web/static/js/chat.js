@@ -13,12 +13,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const chatForm = document.getElementById('chat-form');
     const chatInput = document.getElementById('chat-input');
     const chatMessages = document.getElementById('chat-messages');
+
     const userRole = window.USER_ROLE || '';
 
-    // --- TROUBLESHOOTING: Exibe o cargo do utilizador no console ---
-    console.log(`[Chat IA] Cargo do utilizador detetado: ${userRole || 'Nenhum (convidado)'}`);
-    // --- Fim do Troubleshooting ---
-    
     let chatHistory = [];
 
     if (!chatIcon) return;
@@ -112,6 +109,9 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         async getTopSellerByPeriod(period) {
             return await fetch(`/api/sales/topsellers?period=${period}`).then(res => res.json());
+        },
+        async getProductDetails(identifier) {
+            return await fetch(`/api/products/details?identifier=${identifier}`).then(res => res.json());
         }
     };
 
@@ -156,6 +156,17 @@ document.addEventListener('DOMContentLoaded', () => {
                             filial: { type: "STRING", description: "O nome da filial para filtrar. Se omitido, busca em todas as filiais." }
                         },
                         required: ["limit"]
+                    }
+                },
+                {
+                    name: "getProductDetails",
+                    description: "Obtém todos os detalhes de um produto específico, usando o seu código de barras ou código CNAE como identificador.",
+                    parameters: {
+                        type: "OBJECT",
+                        properties: {
+                            identifier: { type: "STRING", description: "O código de barras ou CNAE do produto." }
+                        },
+                        required: ["identifier"]
                     }
                 }
             ]
@@ -207,7 +218,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 role: "system",
                 parts: [{ text: `
                     Você é um assistente de negócios. Se o utilizador perguntar "quem é você?", apresente-se e descreva as suas capacidades com base nas ferramentas que conhece.
-                    As suas ferramentas são: getSalesSummary, filterProducts, getTopSellers, e getLowStockProducts. Se for admin ou vendedor, também tem acesso a getTopBillingBranch, getSalesSummaryByBranch, e getTopSellerByPeriod.
+                    As suas ferramentas são: getSalesSummary, filterProducts, getTopSellers, getLowStockProducts, e getProductDetails. Se for admin ou vendedor, também tem acesso a getTopBillingBranch, getSalesSummaryByBranch, e getTopSellerByPeriod.
                 `}]
             }
         };
@@ -236,6 +247,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 toolResult = await tools[name](args.period);
             } else if (name === 'getSalesSummaryByBranch') {
                 toolResult = await tools.getSalesSummaryByBranch(args.period, args.branch);
+            } else if (name === 'getProductDetails') {
+                toolResult = await tools.getProductDetails(args.identifier);
             }
             
             chatHistory.push({ role: "model", parts: [{ functionCall: { name, args } }] });
@@ -249,6 +262,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Lógica para o Ollama (com simulação de Tool Calling) ---
+
     async function getOllamaResponse(prompt) {
         let systemPrompt = `
             Você é um assistente de negócios. Você tem acesso a várias ferramentas.
@@ -259,14 +273,15 @@ document.addEventListener('DOMContentLoaded', () => {
             2. filterProducts(category: string, min_price: number)
             3. getTopSellers()
             4. getLowStockProducts(limit: number, filial?: string)
+            5. getProductDetails(identifier: string)
         `;
 
         if (userRole === 'admin' || userRole === 'vendedor') {
             systemPrompt += `
             Ferramentas adicionais para si:
-            5. getTopBillingBranch(period: string) -> period pode ser 'day', 'week', 'month'.
-            6. getSalesSummaryByBranch(period: string, branch: string)
-            7. getTopSellerByPeriod(period: string)
+            6. getTopBillingBranch(period: string) -> period pode ser 'day', 'week', 'month'.
+            7. getSalesSummaryByBranch(period: string, branch: string)
+            8. getTopSellerByPeriod(period: string)
             `;
         }
 
@@ -276,6 +291,7 @@ document.addEventListener('DOMContentLoaded', () => {
             - Para filterProducts, responda APENAS com: {"functionCall": "filterProducts", "category": "...", "min_price": ...}
             - Para getTopSellers, responda APENAS com: {"functionCall": "getTopSellers"}
             - Para getLowStockProducts, responda APENAS com: {"functionCall": "getLowStockProducts", "limit": ..., "filial": "..."}
+            - Para getProductDetails, responda APENAS com: {"functionCall": "getProductDetails", "identifier": "..."}
             - Para getTopBillingBranch, responda APENAS com: {"functionCall": "getTopBillingBranch", "period": "..."}
             - Para getSalesSummaryByBranch, responda APENAS com: {"functionCall": "getSalesSummaryByBranch", "period": "...", "branch": "..."}
             - Para getTopSellerByPeriod, responda APENAS com: {"functionCall": "getTopSellerByPeriod", "period": "..."}
@@ -390,6 +406,24 @@ document.addEventListener('DOMContentLoaded', () => {
                         dataPrompt = `Não há dados de vendas para encontrar o melhor vendedor no período '${period}'.`;
                     } else {
                         dataPrompt = `O melhor vendedor no período '${period}' foi '${result.vendedor_nome}' com um total de R$ ${result.total_vendas.toFixed(2)} em vendas.`;
+                    }
+                    toolCalled = true;
+                    break;
+                }
+                case 'getProductDetails': {
+                    const { identifier } = parsedResponse;
+                    const product = await tools.getProductDetails(identifier);
+                    if (product.error) {
+                        dataPrompt = `Não encontrei nenhum produto com o identificador '${identifier}'.`;
+                    } else {
+                        dataPrompt = `Aqui estão os detalhes do produto '${product.Nome}':\n` +
+                            `- Categoria: ${product.Categoria}\n` +
+                            `- Código de Barras: ${product.CodigoBarras}\n` +
+                            `- CNAE: ${product.CodigoCNAE}\n` +
+                            `- Preço de Custo: R$ ${product.PrecoCusto.toFixed(2)}\n` +
+                            `- Preço de Venda: R$ ${product.PrecoSugerido.toFixed(2)}\n` +
+                            `- Margem de Lucro: ${product.PercentualLucro.toFixed(2)}%\n` +
+                            `- Estoque Total (todas as filiais): ${product.TotalEstoque} unidades`;
                     }
                     toolCalled = true;
                     break;

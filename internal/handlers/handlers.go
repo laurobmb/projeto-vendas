@@ -929,3 +929,24 @@ func (h *Handler) ShowMonitoringDashboard(c *gin.Context) {
 	
 	c.HTML(http.StatusOK, "monitoring_dashboard.html", data)
 }
+
+// NOVO: Handler da API para buscar detalhes de um produto.
+func (h *Handler) HandleGetProductDetails(c *gin.Context) {
+	identifier := c.Query("identifier")
+	if identifier == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "O identificador (cnae ou codigo_barras) é obrigatório."})
+		return
+	}
+
+	product, err := h.Storage.GetProductDetails(identifier)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Falha ao buscar os detalhes do produto."})
+		return
+	}
+	if product == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Produto não encontrado."})
+		return
+	}
+
+	c.JSON(http.StatusOK, product)
+}
