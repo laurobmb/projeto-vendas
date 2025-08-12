@@ -23,6 +23,7 @@ type Produto struct {
 	ID              uuid.UUID
 	Nome            string
 	Descricao       string
+	Categoria       string
 	CodigoBarras    string
 	CodigoCNAE      string
 	PrecoCusto      float64
@@ -129,9 +130,15 @@ func main() {
 	if err != nil { log.Fatalf("🚨 Falha ao inserir produtos: %v", err) }
 	log.Println("✅ Produtos inseridos com sucesso.")
 
+	// CORREÇÃO: Busca os produtos que realmente foram inseridos no banco de dados.
+	log.Println("🔍 A verificar os produtos inseridos...")
+	verifiedProdutos, err := getInsertedProducts(dbpool)
+	if err != nil { log.Fatalf("🚨 Falha ao verificar produtos inseridos: %v", err) }
+	log.Printf("✅ %d produtos verificados no banco de dados.", len(verifiedProdutos))
+
 	// Passo 5: Stock
 	log.Println("⏳ A popular a tabela 'estoque_filiais'...")
-	err = populateEstoque(dbpool, produtos, filiais)
+	err = populateEstoque(dbpool, verifiedProdutos, filiais)
 	if err != nil { log.Fatalf("🚨 Falha ao popular o stock: %v", err) }
 	log.Println("✅ Stock populado com sucesso!")
 
@@ -273,7 +280,6 @@ func createSales(dbpool *pgxpool.Pool, vendedores []User) error {
 		quantidadeVenda := rand.Intn(item.Quantidade/3) + 1
 		totalVenda := float64(quantidadeVenda) * item.PrecoSugerido
 
-		// ATUALIZADO: Gera uma data de venda aleatória nos últimos 90 dias.
 		diasAtras := rand.Intn(90)
 		dataVenda := time.Now().AddDate(0, 0, -diasAtras)
 
@@ -281,7 +287,6 @@ func createSales(dbpool *pgxpool.Pool, vendedores []User) error {
 		if err != nil { continue }
 
 		var vendaID uuid.UUID
-		// ATUALIZADO: Insere a data da venda na query.
 		sqlVenda := `INSERT INTO vendas (usuario_id, filial_id, total_venda, data_venda) VALUES ($1, $2, $3, $4) RETURNING id`
 		err = tx.QueryRow(context.Background(), sqlVenda, vendedorAleatorio.ID, item.FilialID, totalVenda, dataVenda).Scan(&vendaID)
 		if err != nil { tx.Rollback(context.Background()); continue }
@@ -391,6 +396,7 @@ func generateProdutos(count int) []Produto {
 			ID:              uuid.New(),
 			Nome:            nomeCompleto,
 			Descricao:       fmt.Sprintf("Descrição para %s.", nomeCompleto),
+			Categoria:       categoriaNome,
 			CodigoBarras:    strconv.FormatInt(time.Now().UnixNano()+int64(i), 10),
 			CodigoCNAE:      strconv.Itoa(cnaeAleatorio),
 			PrecoCusto:      custo,
@@ -405,8 +411,8 @@ func generateProdutos(count int) []Produto {
 
 func insertProdutos(dbpool *pgxpool.Pool, produtos []Produto) error {
 	sqlStatement := `
-		INSERT INTO produtos (id, nome, descricao, codigo_barras, codigo_cnae, preco_custo, percentual_lucro, imposto_estadual, imposto_federal, preco_sugerido) 
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) 
+		INSERT INTO produtos (id, nome, descricao, categoria, codigo_barras, codigo_cnae, preco_custo, percentual_lucro, imposto_estadual, imposto_federal, preco_sugerido) 
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) 
 		ON CONFLICT (nome) DO NOTHING
 	`
 	jobs := make(chan Produto, len(produtos))
@@ -422,7 +428,7 @@ func insertProdutos(dbpool *pgxpool.Pool, produtos []Produto) error {
 			defer wg.Done()
 			for produto := range jobs {
 				_, err := dbpool.Exec(context.Background(), sqlStatement, 
-					produto.ID, produto.Nome, produto.Descricao, produto.CodigoBarras, produto.CodigoCNAE,
+					produto.ID, produto.Nome, produto.Descricao, produto.Categoria, produto.CodigoBarras, produto.CodigoCNAE,
 					produto.PrecoCusto, produto.PercentualLucro, produto.ImpostoEstadual, produto.ImpostoFederal, produto.PrecoSugerido)
 				if err != nil {
 					log.Printf("Aviso: Falha ao inserir produto %s: %v", produto.Nome, err)
@@ -432,6 +438,25 @@ func insertProdutos(dbpool *pgxpool.Pool, produtos []Produto) error {
 	}
 	wg.Wait()
 	return nil
+}
+
+// NOVO: Busca todos os produtos que foram realmente inseridos no banco.
+func getInsertedProducts(dbpool *pgxpool.Pool) ([]Produto, error) {
+	var products []Produto
+	sql := `SELECT id, nome, descricao, categoria, codigo_barras, codigo_cnae, preco_custo, percentual_lucro, imposto_estadual, imposto_federal, preco_sugerido FROM produtos`
+	rows, err := dbpool.Query(context.Background(), sql)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var p Produto
+		if err := rows.Scan(&p.ID, &p.Nome, &p.Descricao, &p.Categoria, &p.CodigoBarras, &p.CodigoCNAE, &p.PrecoCusto, &p.PercentualLucro, &p.ImpostoEstadual, &p.ImpostoFederal, &p.PrecoSugerido); err != nil {
+			return nil, err
+		}
+		products = append(products, p)
+	}
+	return products, nil
 }
 
 func populateEstoque(dbpool *pgxpool.Pool, produtos []Produto, filiais []Filial) error {

@@ -20,6 +20,7 @@ type Product struct {
 	ID                uuid.UUID
 	Nome              string
 	Descricao         string
+	Categoria       string // NOVO
 	CodigoBarras      string
 	CodigoCNAE        string `json:"CodigoCNAE,omitempty"`
 	PrecoCusto        float64 // NOVO
@@ -58,6 +59,8 @@ type StockViewItem struct {
 	ProdutoID    uuid.UUID
 	ProdutoNome  string
 	CodigoBarras string
+	CodigoCNAE   string // NOVO
+	Categoria    string // NOVO
 	FilialID     uuid.UUID
 	FilialNome   string
 	Quantidade   int

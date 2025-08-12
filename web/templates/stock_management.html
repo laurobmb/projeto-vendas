@@ -48,6 +48,9 @@
                         <tr>
                             <th class="py-2 px-4 text-left">Produto</th>
                             <th class="py-2 px-4 text-left">Filial</th>
+                            <th class="py-2 px-4 text-left">Categoria</th>
+                            <th class="py-2 px-4 text-left">Código de Barras</th>
+                            <th class="py-2 px-4 text-left">CNAE</th>
                             <th class="py-2 px-4 text-right">Stock Atual</th>
                             <th class="py-2 px-4 text-right" style="width: 200px;">Nova Quantidade</th>
                             <th class="py-2 px-4 text-center">Ação</th>
@@ -61,6 +64,9 @@
                                 <input type="hidden" name="filial_id" value="{{ .FilialID }}">
                                 <td class="py-2 px-4">{{ .ProdutoNome }}</td>
                                 <td class="py-2 px-4">{{ .FilialNome }}</td>
+                                <td class="py-2 px-4">{{ .Categoria }}</td>
+                                <td class="py-2 px-4 font-mono">{{ .CodigoBarras }}</td>
+                                <td class="py-2 px-4 font-mono">{{ .CodigoCNAE }}</td>
                                 <td class="py-2 px-4 text-right font-mono">{{ .Quantidade }}</td>
                                 <td class="py-2 px-4">
                                     <input type="number" name="quantity" value="{{ .Quantidade }}" min="0" class="w-full text-right border rounded p-1">

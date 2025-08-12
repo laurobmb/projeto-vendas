@@ -228,8 +228,8 @@ func (s *Storage) CreateProductWithInitialStock(product models.Product, filialID
 	}
 	defer tx.Rollback(context.Background())
 	var newProductID string
-	sqlProduct := `INSERT INTO produtos (nome, descricao, codigo_barras, codigo_cnae, preco_custo, percentual_lucro, imposto_estadual, imposto_federal, preco_sugerido) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`
-	err = tx.QueryRow(context.Background(), sqlProduct, product.Nome, product.Descricao, product.CodigoBarras, product.CodigoCNAE, product.PrecoCusto, product.PercentualLucro, product.ImpostoEstadual, product.ImpostoFederal, product.PrecoSugerido).Scan(&newProductID)
+	sqlProduct := `INSERT INTO produtos (nome, descricao, categoria, codigo_barras, codigo_cnae, preco_custo, percentual_lucro, imposto_estadual, imposto_federal, preco_sugerido) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`
+	err = tx.QueryRow(context.Background(), sqlProduct, product.Nome, product.Descricao, product.Categoria, product.CodigoBarras, product.CodigoCNAE, product.PrecoCusto, product.PercentualLucro, product.ImpostoEstadual, product.ImpostoFederal, product.PrecoSugerido).Scan(&newProductID)
 	if err != nil {
 		return fmt.Errorf("falha ao inserir o produto na transação: %w", err)
 	}
@@ -291,7 +291,7 @@ func (s *Storage) CountStockItems(filialID, searchQuery string) (int, error) {
 func (s *Storage) GetStockItemsPaginated(filialID, searchQuery string, limit, offset int) ([]models.StockViewItem, error) {
 	var items []models.StockViewItem
 	sql := `
-		SELECT p.id, p.nome, p.codigo_barras, f.id, f.nome, ef.quantidade
+		SELECT p.id, p.nome, p.codigo_barras, COALESCE(p.codigo_cnae, ''), COALESCE(p.categoria, ''), f.id, f.nome, ef.quantidade
 		FROM estoque_filiais ef
 		JOIN produtos p ON ef.produto_id = p.id
 		JOIN filiais f ON ef.filial_id = f.id
@@ -319,7 +319,7 @@ func (s *Storage) GetStockItemsPaginated(filialID, searchQuery string, limit, of
 	defer rows.Close()
 	for rows.Next() {
 		var item models.StockViewItem
-		if err := rows.Scan(&item.ProdutoID, &item.ProdutoNome, &item.CodigoBarras, &item.FilialID, &item.FilialNome, &item.Quantidade); err != nil {
+		if err := rows.Scan(&item.ProdutoID, &item.ProdutoNome, &item.CodigoBarras, &item.CodigoCNAE, &item.Categoria, &item.FilialID, &item.FilialNome, &item.Quantidade); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -345,7 +345,7 @@ func (s *Storage) UpdateStockQuantity(productID, filialID string, newQuantity in
 func (s *Storage) GetProductsPaginatedAndFiltered(searchQuery string, limit, offset int) ([]models.Product, error) {
 	var products []models.Product
 	sql := `
-		SELECT p.id, p.nome, p.descricao, p.codigo_barras, COALESCE(p.codigo_cnae, ''), p.preco_custo, p.percentual_lucro,
+		SELECT p.id, p.nome, p.descricao, COALESCE(p.categoria, ''), p.codigo_barras, COALESCE(p.codigo_cnae, ''), p.preco_custo, p.percentual_lucro,
 		p.imposto_estadual, p.imposto_federal, p.preco_sugerido,
 				COALESCE(SUM(ef.quantidade), 0) as total_estoque,
 				(COALESCE(SUM(ef.quantidade), 0) * p.preco_sugerido) as valor_total_estoque
@@ -368,7 +368,7 @@ func (s *Storage) GetProductsPaginatedAndFiltered(searchQuery string, limit, off
 	defer rows.Close()
 	for rows.Next() {
 		var p models.Product
-		if err := rows.Scan(&p.ID, &p.Nome, &p.Descricao, &p.CodigoBarras, &p.CodigoCNAE, &p.PrecoCusto, &p.PercentualLucro, &p.ImpostoEstadual, &p.ImpostoFederal, &p.PrecoSugerido, &p.TotalEstoque, &p.ValorTotalEstoque); err != nil {
+		if err := rows.Scan(&p.ID, &p.Nome, &p.Descricao, &p.Categoria, &p.CodigoBarras, &p.CodigoCNAE, &p.PrecoCusto, &p.PercentualLucro, &p.ImpostoEstadual, &p.ImpostoFederal, &p.PrecoSugerido, &p.TotalEstoque, &p.ValorTotalEstoque); err != nil {
 			return nil, err
 		}
 		products = append(products, p)
@@ -504,8 +504,8 @@ func (s *Storage) AddUser(user models.User, password string) error {
 }
 
 func (s *Storage) AddProduct(product models.Product) error {
-	sql := `INSERT INTO produtos (nome, descricao, codigo_barras, codigo_cnae, preco_custo, percentual_lucro, imposto_estadual, imposto_federal, preco_sugerido) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`
-	_, err := s.Dbpool.Exec(context.Background(), sql, product.Nome, product.Descricao, product.CodigoBarras, product.CodigoCNAE, product.PrecoCusto, product.PercentualLucro, product.ImpostoEstadual, product.ImpostoFederal, product.PrecoSugerido)
+	sql := `INSERT INTO produtos (nome, descricao, categoria, codigo_barras, codigo_cnae, preco_custo, percentual_lucro, imposto_estadual, imposto_federal, preco_sugerido) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`
+	_, err := s.Dbpool.Exec(context.Background(), sql, product.Nome, product.Descricao, product.Categoria, product.CodigoBarras, product.CodigoCNAE, product.PrecoCusto, product.PercentualLucro, product.ImpostoEstadual, product.ImpostoFederal, product.PrecoSugerido)
 	return err
 }
 
@@ -594,13 +594,13 @@ func (s *Storage) DeleteSocioByID(id string) error {
 func (s *Storage) UpdateProduct(productID string, product models.Product) error {
     sql := `
         UPDATE produtos SET 
-            nome = $1, descricao = $2, codigo_barras = $3, preco_custo = $4, 
-            percentual_lucro = $5, imposto_estadual = $6, imposto_federal = $7, preco_sugerido = $8, codigo_cnae = $9,
+            nome = $1, descricao = $2, categoria = $3, codigo_barras = $4, preco_custo = $5, 
+            percentual_lucro = $6, imposto_estadual = $7, imposto_federal = $8, preco_sugerido = $9, codigo_cnae = $10,
             data_atualizacao = NOW()
-        WHERE id = $10
-    `
+        WHERE id = $11
+	`
     cmdTag, err := s.Dbpool.Exec(context.Background(), sql, 
-        product.Nome, product.Descricao, product.CodigoBarras, product.PrecoCusto,
+        product.Nome, product.Descricao, product.Categoria, product.CodigoBarras, product.PrecoCusto,
         product.PercentualLucro, product.ImpostoEstadual, product.ImpostoFederal, product.PrecoSugerido, product.CodigoCNAE,
         productID)
     
@@ -820,22 +820,11 @@ func (s *Storage) GetTotalStockValue() (float64, error) {
 	return totalValue, err
 }
 
-// ATUALIZADO: A query agora categoriza os produtos corretamente com base nos seus nomes.
 func (s *Storage) GetStockComposition() ([]models.StockComposition, error) {
 	var composition []models.StockComposition
 	sql := `
 		SELECT 
-			CASE 
-				WHEN p.nome ILIKE ANY(ARRAY['%Arroz%', '%Feijão%', '%Macarrão%', '%Óleo de Soja%', '%Açúcar%', '%Café%', '%Leite em Pó%', '%Farinha de Trigo%', '%Biscoito%', '%Molho de Tomate%', '%Sal%', '%Aveia%', '%Achocolatado em Pó%', '%Milho Verde%', '%Ervilha%', '%Sardinha em Lata%', '%Atum em Lata%', '%Margarina%', '%Manteiga%', '%Gelatina%', '%Fermento em Pó%', '%Batata Chips%', '%Pipoca de Micro-ondas%']) THEN 'Alimentos'
-				WHEN p.nome ILIKE ANY(ARRAY['%Sabão em Pó%', '%Detergente%', '%Água Sanitária%', '%Desinfetante%', '%Amaciante de Roupas%', '%Limpador Multiuso%', '%Saponáceo%', '%Removedor de Gordura%', '%Esponja de Aço%', '%Esponja Multiuso%', '%Pano de Chão%', '%Rodo%', '%Vassoura%']) THEN 'Limpeza'
-				WHEN p.nome ILIKE ANY(ARRAY['%Sabonete%', '%Shampoo%', '%Condicionador%', '%Creme Dental%', '%Papel Higiénico%', '%Desodorante%', '%Escova de Dentes%', '%Fio Dental%', '%Lenço Umedecido%', '%Álcool em Gel%', '%Absorvente Feminino%', '%Aparelho de Barbear%']) THEN 'Higiene'
-				WHEN p.nome ILIKE ANY(ARRAY['%Smartphone%', '%Notebook%', '%TV LED 4K%', '%Fone de Ouvido Bluetooth%', '%Smartwatch%', '%Carregador Portátil%', '%Mouse Sem Fio%', '%Teclado Sem Fio%', '%Caixa de Som Bluetooth%', '%Tablet%', '%Roteador Wi-Fi%', '%Câmera de Segurança%', '%Console de Videogame%']) THEN 'Eletrónicos'
-				WHEN p.nome ILIKE ANY(ARRAY['%Liquidificador%', '%Batedeira%', '%Fritadeira Elétrica%', '%Micro-ondas%', '%Geladeira%', '%Fogão%', '%Aspirador de Pó%', '%Ventilador%', '%Ar-Condicionado%', '%Cafeteira Elétrica%', '%Sanduicheira%', '%Chaleira Elétrica%', '%Torradeira%']) THEN 'Eletrodomésticos'
-				WHEN p.nome ILIKE ANY(ARRAY['%Água Mineral%', '%Refrigerante%', '%Suco de Caixinha%', '%Suco Concentrado%', '%Energético%', '%Cerveja%', '%Vinho%', '%Whisky%', '%Vodka%', '%Água de Coco%', '%Chá Gelado%', '%Café Pronto%', '%Leite%']) THEN 'Bebidas'
-				WHEN p.nome ILIKE ANY(ARRAY['%Baldes%', '%Vasilhas Plásticas%', '%Panelas%', '%Copos de Vidro%', '%Pratos%', '%Talheres%', '%Travessas%', '%Assadeiras%', '%Jarras%', '%Potes Herméticos%', '%Cadeiras Plásticas%', '%Mesa Dobrável%']) THEN 'Bazar'
-				WHEN p.nome ILIKE ANY(ARRAY['%Chave de Fenda%', '%Martelo%', '%Alicate%', '%Trena%', '%Parafusadeira%', '%Furadeira%', '%Chave Inglesa%', '%Serrote%', '%Nível%', '%Caixa de Ferramentas%']) THEN 'Ferramentas'
-				ELSE 'Outros'
-			END as categoria,
+			COALESCE(p.categoria, 'Sem Categoria') as categoria,
 			SUM(p.preco_custo * ef.quantidade) as valor
 		FROM produtos p
 		JOIN estoque_filiais ef ON p.id = ef.produto_id
@@ -857,8 +846,6 @@ func (s *Storage) GetStockComposition() ([]models.StockComposition, error) {
 	}
 	return composition, nil
 }
-
-
 
 // NOVO: Calcula a Margem de Lucro Bruta e o Giro de Estoque.
 func (s *Storage) GetFinancialKPIs(days int) (models.FinancialKPIs, error) {

@@ -349,6 +349,7 @@ func (h *Handler) HandleAddProduct(c *gin.Context) {
     product := models.Product{
         Nome:          c.PostForm("name"),
         Descricao:     c.PostForm("description"),
+		Categoria:     c.PostForm("categoria"),
         CodigoBarras:  c.PostForm("barcode"),
         CodigoCNAE:    c.PostForm("codigo_cnae"),
         PrecoCusto:    custo,
@@ -395,6 +396,7 @@ func (h *Handler) HandleEditProduct(c *gin.Context) {
     product := models.Product{
         Nome:          c.PostForm("name"),
         Descricao:     c.PostForm("description"),
+		Categoria:     c.PostForm("categoria"),
         CodigoBarras:  c.PostForm("barcode"),
         CodigoCNAE:    c.PostForm("codigo_cnae"),
         PrecoCusto:    custo,

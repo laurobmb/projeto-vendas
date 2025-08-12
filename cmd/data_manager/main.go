@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS produtos (
     percentual_lucro DECIMAL(5, 2) NOT NULL DEFAULT 0,
     imposto_estadual DECIMAL(5, 2) NOT NULL DEFAULT 0,
     imposto_federal DECIMAL(5, 2) NOT NULL DEFAULT 0,
-
+	categoria VARCHAR(100),
     preco_sugerido DECIMAL(10, 2) NOT NULL CHECK (preco_sugerido >= 0),
     data_criacao TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     data_atualizacao TIMESTAMPTZ NOT NULL DEFAULT NOW()

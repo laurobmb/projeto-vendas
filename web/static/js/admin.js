@@ -152,6 +152,7 @@ function openEditProductModal(productJson) {
     modal.querySelector('form').action = `/admin/products/edit/${product.ID}`;
     modal.querySelector('input[name="name"]').value = product.Nome;
     modal.querySelector('input[name="barcode"]').value = product.CodigoBarras;
+    modal.querySelector('select[name="categoria"]').value = product.Categoria || ''; // CORREÇÃO
     modal.querySelector('input[name="codigo_cnae"]').value = product.CodigoCNAE || ''; // ATUALIZADO    
     modal.querySelector('textarea[name="description"]').value = product.Descricao;
     modal.querySelector('input[name="preco_custo"]').value = product.PrecoCusto;
